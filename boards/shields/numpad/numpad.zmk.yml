@@ -1,0 +1,7 @@
+name: numpad
+type: keyboard
+description: "Numeric keypad with EC11 rotary encoder and 0.91 OLED, nice!nano v2 based"
+features:
+  - keys
+  - encoder
+  - display

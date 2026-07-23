@@ -1,0 +1,7 @@
+# 本地 ZMK 构建产物
+build/
+*.uf2
+
+# IDE / 工具工作目录
+.trae/
+.vscode/
