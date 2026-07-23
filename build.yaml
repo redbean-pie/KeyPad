@@ -2,5 +2,5 @@
 # board 用 nice_nano（v2 通过 board revision，默认即 v2 行为）
 # shield 为本工程的 numpad
 include:
-  - board: nice_nano
+  - board: nice_nano//zmk
     shield: numpad
