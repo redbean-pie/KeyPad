@@ -2,6 +2,24 @@
 build/
 *.uf2
 
+# west 工作区产物（本地构建拉取的 zmk/zephyr 源码）
+.west/
+/zmk/
+/modules/
+/tools/
+/bootloader/
+
+# Zephyr SDK 拉取的源码产物（注意：保留工程内的 zephyr/module.yml）
+/zephyr/*
+!/zephyr/module.yml
+
+# 参考资料 / 第三方源码（体积大，不入库）
+/nicenano_NRF52840资料/
+/optional/
+
 # IDE / 工具工作目录
 .trae/
 .vscode/
+
+# 构建缓存（CMake initial cache，本地工具链路径相关）
+/zmk-cache.cmake

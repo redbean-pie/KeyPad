@@ -1,0 +1,11 @@
+{
+  "name": "ZMK Numpad Build",
+  "image": "docker.io/zmkfirmware/zmk-build-arm:stable",
+  "remoteUser": "root",
+  "postCreateCommand": "west init -l config && west update",
+  "customizations": {
+    "vscode": {
+      "extensions": []
+    }
+  }
+}
