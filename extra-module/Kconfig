@@ -3,3 +3,4 @@
 
 rsource "drivers/kscan/Kconfig"
 rsource "battery_led/Kconfig"
+rsource "ble_led/Kconfig"

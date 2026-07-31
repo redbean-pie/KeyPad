@@ -10,7 +10,8 @@
  *   右列 D10-D18：R0=D10 R1=D16 R2=D14 R3=D15 R4=D18
  *   WS2812 主链: DATA=D20 (P0.29, SPIM3 MOSI) — 19 颗 RGB 效果
  *   WS2812 电量链: DATA=D19 (P0.2, SPIM2 MOSI) — 2 颗电量灯
- *   预留：D0/D1（串口）、D21
+ *   蓝牙 LED: D21 (P0.31, GPIO 输出) — 蓝灯, 已连接常亮/未连接闪烁
+ *   预留：D0/D1（串口）
  *
  * 编码器按压：复用矩阵 R4C0（0 行空位，行 D18 + 列 D2），不再需要独立虚拟行
  */
@@ -116,6 +117,14 @@ RC(7,0) RC(7,1) RC(7,2) RC(7,3)
         compatible = "zmk,keymap-sensors";
         sensors = <&encoder>;
         triggers-per-rotation = <20>;
+    };
+
+    /* 蓝牙状态 LED（D21 直驱蓝灯）*/
+    ble_leds: ble_leds {
+        compatible = "gpio-leds";
+        ble_status_led: led_ble {
+            gpios = <&pro_micro 21 GPIO_ACTIVE_HIGH>;
+        };
     };
 };
 

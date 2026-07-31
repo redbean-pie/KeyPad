@@ -27,6 +27,7 @@
 | EC11 B 相 | D9 | 左13 | P1.6 |
 | WS2812 DATA | D20 | 右7 | P0.29 | RGB 灯珠数据（SPIM3 MOSI）|
 | WS2812 电量 | D19 | 右8 | P0.2 | 电量灯数据（SPIM2 MOSI）|
+| 蓝牙 LED | D21 | 右6 | P0.31 | 蓝灯，`extra-module/ble_led` 驱动 |
 | UART RX（保留） | D0 | 左3 | P0.8 |
 | UART TX（保留） | D1 | 左2 | P0.6 |
 
@@ -39,7 +40,9 @@
   - 非充电时：进 fn 层显示电量 2 秒（绿/红分级）
 - 供电从 RAW 取（勿用 3.3V），每 5-10 颗加 100nF 去耦
 
-**未使用引脚**：D21（右6）空闲可扩展。D0/D1 保留给串口调试，不占用。
+**蓝牙状态 LED**（D21）：已连接常亮 / 未连接 500ms 闪烁，`extra-module/ble_led` 模块监听 `zmk_ble_active_profile_changed`。
+
+**未使用引脚**：无（D0/D1 保留给串口调试）。
 
 ## 构建方法
 

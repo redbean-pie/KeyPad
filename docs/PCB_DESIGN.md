@@ -155,7 +155,7 @@ Zephyr 节点形式：`&gpio0 N` = P0.N，`&gpio1 N` = P1.N。
 | WS2812 电量 | D19 | P0.2 | `&gpio0 2` | SPIM2 MOSI，4MHz，2 颗电量灯 |
 | VBUS 检测（新增）| — | 待分配 | 任一空闲 GPIO |
 | UART（调试，可选）| D0/D1 | P0.8/P0.6 | `&gpio0 8`/`&gpio0 6` |
-| 预留扩展 | D21 | P0.31 | `&gpio0 31` |
+| 蓝牙 LED | D21 | P0.31 | `&gpio0 31` | GPIO 输出，蓝灯+限流电阻 |
 
 > 整板可重新分配引脚以优化走线，软件侧同步改 overlay 即可。
 

@@ -1,0 +1,7 @@
+# Copyright (c) 2026
+# SPDX-License-Identifier: MIT
+
+config ZMK_BLE_LED
+    bool "Bluetooth connection status LED (GPIO direct drive)"
+    default y
+    select GPIO
