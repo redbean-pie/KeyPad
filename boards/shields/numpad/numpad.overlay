@@ -8,8 +8,9 @@
  * 引脚分配（按排针物理位置连续）：
  *   左列 D2-D9：C0=D2 C1=D3 C2=D4 C3=D5 | AI32C: OUT1=D6 OUT2=D7 | EC11: A=D8 B=D9
  *   右列 D10-D18：R0=D10 R1=D16 R2=D14 R3=D15 R4=D18
- *   WS2812: DATA=D20 (P0.29, SPIM3 MOSI)
- *   预留：D0/D1（串口）、D19/D21
+ *   WS2812 主链: DATA=D20 (P0.29, SPIM3 MOSI) — 19 颗 RGB 效果
+ *   WS2812 电量链: DATA=D19 (P0.2, SPIM2 MOSI) — 2 颗电量灯
+ *   预留：D0/D1（串口）、D21
  *
  * 编码器按压：复用矩阵 R4C0（0 行空位，行 D18 + 列 D2），不再需要独立虚拟行
  */
@@ -155,6 +156,41 @@ RC(7,0) RC(7,1) RC(7,2) RC(7,3)
         spi-one-frame = <0x70>;
         spi-zero-frame = <0x40>;
 
+        color-mapping = <LED_COLOR_ID_GREEN LED_COLOR_ID_RED LED_COLOR_ID_BLUE>;
+    };
+};
+
+/* WS2812 电量指示灯：SPIM2 MOSI = D19 (P0.2)，2 颗，独立链避免与 RGB 冲突 */
+&pinctrl {
+    spi2_default: spi2_default {
+        group1 {
+            psels = <NRF_PSEL(SPIM_MOSI, 0, 2)>;
+        };
+    };
+
+    spi2_sleep: spi2_sleep {
+        group1 {
+            psels = <NRF_PSEL(SPIM_MOSI, 0, 2)>;
+            low-power-enable;
+        };
+    };
+};
+
+&spi2 {
+    compatible = "nordic,nrf-spim";
+    status = "okay";
+
+    pinctrl-0 = <&spi2_default>;
+    pinctrl-1 = <&spi2_sleep>;
+    pinctrl-names = "default", "sleep";
+
+    led_strip_batt: ws2812@0 {
+        compatible = "worldsemi,ws2812-spi";
+        reg = <0>;
+        spi-max-frequency = <4000000>;
+        chain-length = <2>;
+        spi-one-frame = <0x70>;
+        spi-zero-frame = <0x40>;
         color-mapping = <LED_COLOR_ID_GREEN LED_COLOR_ID_RED LED_COLOR_ID_BLUE>;
     };
 };

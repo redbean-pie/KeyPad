@@ -105,6 +105,18 @@
   - 文档更新：PINOUT/NOTES/PCB_DESIGN
   - 编译通过，FLASH 25.75%（+0.88%），RAM 18.79%（+0.33%）
 
+### 补充：电量指示灯（2026-07-31 会话内新增）
+
+- **Status:** complete
+- **背景：** 共享 WS2812 链与 rgb_underglow 冲突（50ms 定时覆盖整链），故用独立第二链
+- Actions taken:
+  - overlay: 新增 spi2（SPIM2 MOSI=P0.2/D19）+ led_strip_batt（chain-length=2）
+  - 新增 `extra-module/battery_led/`：订阅层事件，进 fn 层显示电量 2 秒
+  - 电量映射：75-100% 2绿 / 50-75% 1绿 / 25-50% 2红 / 10-25% 1红 / ≤10% 2红闪
+  - CMake 修复：zephyr_library_amend 改用 zephyr_library() 自建库 + 补 zmk/app/include
+  - 文档更新：PINOUT/NOTES/PCB_DESIGN
+  - 编译通过，FLASH 25.86%（+0.11%），RAM 18.91%（+0.12%）
+
 ### Phase 5: 烧录测试
 
 - **Status:** pending

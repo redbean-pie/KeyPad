@@ -1,0 +1,7 @@
+# Copyright (c) 2026
+# SPDX-License-Identifier: MIT
+
+config ZMK_BATTERY_LED
+    bool "Battery level LED indicator (independent WS2812 chain)"
+    default y
+    select LED_STRIP

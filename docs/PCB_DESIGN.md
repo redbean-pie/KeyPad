@@ -17,7 +17,7 @@
 | 5×4 矩阵 | 编码器按压复用 R4C0 空位 |
 | EC11 编码器 | A/B + 按下 |
 | AI32C 触摸滑块 | 3 通道电容触摸，2 线编码输出（替换 OLED）|
-| WS2812 RGB | 每键 1 颗共 19 颗，SPIM3 驱动 |
+| WS2812 RGB | 每键 1 颗共 19 颗（SPIM3）+ 2 颗电量灯（SPIM2）|
 | 电源开关 | 机械拨动开关控制电池通断 |
 
 ## 2. 系统框图
@@ -151,10 +151,11 @@ Zephyr 节点形式：`&gpio0 N` = P0.N，`&gpio1 N` = P1.N。
 | AI32C OUT2 | D7 | P0.11 | `&gpio0 11` |
 | AI32C VDD | 3.3V | — | 串 20Ω（不可省）|
 | AI32C C1 | — | — | 4.7nF NPO → GND |
-| WS2812 DATA | D20 | P0.29 | `&gpio0 29` | SPIM3 MOSI，4MHz |
+| WS2812 DATA | D20 | P0.29 | `&gpio0 29` | SPIM3 MOSI，4MHz，19 颗 RGB |
+| WS2812 电量 | D19 | P0.2 | `&gpio0 2` | SPIM2 MOSI，4MHz，2 颗电量灯 |
 | VBUS 检测（新增）| — | 待分配 | 任一空闲 GPIO |
 | UART（调试，可选）| D0/D1 | P0.8/P0.6 | `&gpio0 8`/`&gpio0 6` |
-| 预留扩展 | D19/D21 | P0.2/P0.31 | `&gpio0 2`/`&gpio0 31` |
+| 预留扩展 | D21 | P0.31 | `&gpio0 31` |
 
 > 整板可重新分配引脚以优化走线，软件侧同步改 overlay 即可。
 
