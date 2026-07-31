@@ -4,6 +4,11 @@
  *
  * 数字小键盘 shield（nice!nano v2 / Pro Micro 互连）
  * 6x4 矩阵(含编码器按下虚拟行) + EC11 旋钮 + AI32C 触摸滑块
+ *
+ * 引脚分配（按排针物理位置连续）：
+ *   左列 D2-D9：C0=D2 C1=D3 C2=D4 C3=D5 | AI32C: OUT1=D6 OUT2=D7 | EC11: A=D8 B=D9
+ *   右列 D10-D19：R0=D10 R1=D16 R2=D14 R3=D15 R4=D18 R5=D19(编码器按下)
+ *   预留：D0/D1（串口）、D20/D21
  */
 #include <dt-bindings/zmk/matrix_transform.h>
 
@@ -30,24 +35,24 @@
         };
     };
 
-    /* 6x4 matrix kscan (unchanged) */
+    /* 6x4 matrix kscan */
     kscan_matrix: kscan_matrix {
         compatible = "zmk,kscan-gpio-matrix";
         wakeup-source;
         diode-direction = "col2row";
         row-gpios
-            = <&pro_micro 20 (GPIO_ACTIVE_HIGH | GPIO_PULL_DOWN)>
+            = <&pro_micro 10 (GPIO_ACTIVE_HIGH | GPIO_PULL_DOWN)>
             , <&pro_micro 16 (GPIO_ACTIVE_HIGH | GPIO_PULL_DOWN)>
             , <&pro_micro 14 (GPIO_ACTIVE_HIGH | GPIO_PULL_DOWN)>
             , <&pro_micro 15 (GPIO_ACTIVE_HIGH | GPIO_PULL_DOWN)>
             , <&pro_micro 18 (GPIO_ACTIVE_HIGH | GPIO_PULL_DOWN)>
-            , <&pro_micro 10 (GPIO_ACTIVE_HIGH | GPIO_PULL_DOWN)>
+            , <&pro_micro 19 (GPIO_ACTIVE_HIGH | GPIO_PULL_DOWN)>
             ;
         col-gpios
-            = <&pro_micro 9  GPIO_ACTIVE_HIGH>
-            , <&pro_micro 6  GPIO_ACTIVE_HIGH>
-            , <&pro_micro 5  GPIO_ACTIVE_HIGH>
+            = <&pro_micro 2  GPIO_ACTIVE_HIGH>
+            , <&pro_micro 3  GPIO_ACTIVE_HIGH>
             , <&pro_micro 4  GPIO_ACTIVE_HIGH>
+            , <&pro_micro 5  GPIO_ACTIVE_HIGH>
             ;
     };
 
@@ -55,8 +60,8 @@
     kscan_ai32c: kscan_ai32c {
         compatible = "zmk,kscan-gpio-ai32c";
         out-gpios
-            = <&pro_micro 2 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>
-            , <&pro_micro 3 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>
+            = <&pro_micro 6 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>
+            , <&pro_micro 7 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>
             ;
         poll-period-ms = <10>;
     };
@@ -97,8 +102,8 @@ RC(8,0) RC(8,1) RC(8,2) RC(8,3)
 
     encoder: encoder {
         compatible = "alps,ec11";
-        a-gpios = <&pro_micro 7 (GPIO_ACTIVE_HIGH | GPIO_PULL_UP)>;
-        b-gpios = <&pro_micro 8 (GPIO_ACTIVE_HIGH | GPIO_PULL_UP)>;
+        a-gpios = <&pro_micro 8 (GPIO_ACTIVE_HIGH | GPIO_PULL_UP)>;
+        b-gpios = <&pro_micro 9 (GPIO_ACTIVE_HIGH | GPIO_PULL_UP)>;
         steps = <80>;
         status = "disabled";
     };

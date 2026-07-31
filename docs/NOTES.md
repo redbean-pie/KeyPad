@@ -4,29 +4,32 @@
 - **类型**：ZMK 数字小键盘固件
 - **板子**：nice!nano v2（nRF52840，Pro Micro 兼容接口）
 - **Shield**：numpad（6×4 矩阵含编码器按下虚拟行 + EC11 旋钮 + AI32C 触摸滑块）
-- **当前状态**：标准 numpad 布局（删 FN、0 改 2U 宽、编码器按下切层），编译通过 ✅
+- **当前状态**：标准 numpad 布局 + AI32C 触摸集成，编译通过 ✅
 
 ## 引脚分配
 
-| 功能 | Pro Micro | nRF52840 |
-|------|-----------|----------|
-| 矩阵行 R0 | D20 / A2 | P0.29 |
-| 矩阵行 R1 | D16 | P0.10 |
-| 矩阵行 R2 | D14 | P1.11 |
-| 矩阵行 R3 | D15 | P1.13 |
-| 矩阵行 R4 | D18 / A0 | P1.15 |
-| 矩阵行 R5（编码器按下）| D10 / A10 | P0.9 |
-| 矩阵列 C0 | D9 / A9 | P1.6 |
-| 矩阵列 C1 | D6 / A7 | P1.0 |
-| 矩阵列 C2 | D5 | P0.24 |
-| 矩阵列 C3 | D4 / A6 | P0.22 |
-| EC11 A 相 | D7 | P0.11 |
-| EC11 B 相 | D8 / A8 | P1.4 |
-| AI32C OUT1 | D2 | P0.17 | 触摸数据通道1 |
-| AI32C OUT2 | D3 | P0.20 | 触摸数据通道2 |
-| UART RX（空闲） | D0 | P0.8 |
+> 分配原则：每类信号使用排针上物理连续的引脚。左列 D2-D9 连续，右列 D10-D19 连续。
 
-**未使用引脚**：D19/A1（预留拨动开关）、D21/A3 可作扩展。D0 空闲（UART RX 备用）。D1 已释放（原误分配给 AI32C T3）。D2/D3 已分配给 AI32C OUT1/OUT2。
+| 功能 | Pro Micro | 物理位置 | nRF52840 |
+|------|-----------|----------|----------|
+| 矩阵行 R0 | D10 | 右13 | P0.9 |
+| 矩阵行 R1 | D16 | 右12 | P0.10 |
+| 矩阵行 R2 | D14 | 右11 | P1.11 |
+| 矩阵行 R3 | D15 | 右10 | P1.13 |
+| 矩阵行 R4 | D18 | 右9 | P1.15 |
+| 矩阵行 R5（编码器按下）| D19 | 右8 | P0.2 |
+| 矩阵列 C0 | D2 | 左6 | P0.17 |
+| 矩阵列 C1 | D3 | 左7 | P0.20 |
+| 矩阵列 C2 | D4 | 左8 | P0.22 |
+| 矩阵列 C3 | D5 | 左9 | P0.24 |
+| AI32C OUT1 | D6 | 左10 | P1.0 | 触摸数据通道1 |
+| AI32C OUT2 | D7 | 左11 | P0.11 | 触摸数据通道2 |
+| EC11 A 相 | D8 | 左12 | P1.4 |
+| EC11 B 相 | D9 | 左13 | P1.6 |
+| UART RX（保留） | D0 | 左3 | P0.8 |
+| UART TX（保留） | D1 | 左2 | P0.6 |
+
+**未使用引脚**：D20（右7）、D21（右6）空闲可扩展。D0/D1 保留给串口调试，不占用。
 
 ## 构建方法
 
@@ -56,25 +59,29 @@ west build -d build
 ## 已应用的关键修复
 1. **Physical Layout 适配** — `numpad.overlay` 使用 `zmk,physical-layout`（main 分支新系统，旧 `zmk,matrix-transform` 已失效）
 2. **模块入口分离** — `extra-module/zephyr/module.yml`（`board_root: ..`）避免项目根目录 `zephyr/` 自递归
-3. **编码器引脚调整** — 从 D0/D1 移到 D7/D8，释放串口
+3. **编码器引脚调整** — 从 D0/D1 移到 D8/D9，释放串口
 4. **att.c C99 修复** — `zephyr/subsys/bluetooth/host/att.c` 第 731 行 `default:` 后加空语句（GCC 10 兼容）
+5. **AI32C kscan driver** — 自定义 2 GPIO 解码驱动（`extra-module/drivers/kscan/kscan_gpio_ai32c.c`）
+6. **引脚重排** — 按排针物理位置连续分配，所有信号组物理连续
 
 ## 构建产物
 - 路径：`build/zephyr/zmk.uf2`
-- 大小：648192 字节
-- 内存：FLASH 39.94% / RAM 21.34%
+- 大小：403456 字节（含 AI32C driver）
+- 内存：FLASH 24.87% / RAM 18.50%
 - 刷入：拖入 nice!nano v2 USB 存储器
 
 ## 提交记录
-- `56ee32e` feat: 初始化数字小键盘 ZMK 工程
-- `6f6b747` fix: 补 config/west.yml 并改用 nice_nano//zmk variant
-- `f8c2a01` feat: 适配 ZMK main 分支并支持本地工具链构建
+- `f1ebb22` feat: 集成 AI32C 触摸滑块 kscan driver
+- `81c033e` feat: 标准 numpad 布局 — 删 FN 键、0 改 2U 宽、编码器按下切层，文档迁移至 docs/
 - `a830daf` feat: 重新设计布局并实现编码器双模式切换
+- `4c48d9a` docs: 添加项目备注文档
+- `f8c2a01` feat: 适配 ZMK main 分支并支持本地工具链构建
+- `6f6b747` fix: 补 config/west.yml 并改用 nice_nano//zmk variant
+- `56ee32e` feat: 初始化数字小键盘 ZMK 工程
 
 ## 下一步可做
-- 编写 AI32C 自定义 ZMK kscan driver（2 GPIO 解码为 3 键）
-- 编译验证 AI32C driver 集成后固件正常
-- 烧录测试触摸滑块三通道
-- 提交当前标准布局改动
-- 启用串口调试（D0 已释放）
+- 提交引脚重排改动
+- 烧录测试：杜邦线模拟 AI32C 输出（D6/D7 碰 GND）验证解码
+- PCB 打板后真实触摸测试
+- 启用串口调试（D0/D1 已保留）
 - 深睡眠 `CONFIG_ZMK_SLEEP=y`（`config/numpad.conf` 已注释）

@@ -69,13 +69,25 @@
   - 验证 driver .obj 已链接到固件
   - `zmk.uf2` 已生成（403456 bytes）
 
+### 补充：引脚重排（2026-07-31 会话内新增）
+
+- **Status:** complete
+- **原因：** 用户指出 IO 使用顺序乱（历史调整造成）
+- Actions taken:
+  - 重新规划：按排针物理位置连续分配
+  - overlay GPIO 全部重排：行 R0-R5=D10/D16/D14/D15/D18/D19，列 C0-C3=D2/D3/D4/D5，AI32C OUT1/2=D6/D7，EC11 A/B=D8/D9
+  - 更新 PINOUT.md（完整接线表 + 物理位置）
+  - 更新 NOTES.md（引脚分配表）
+  - 更新 PCB_DESIGN.md（OLED→AI32C，引脚表，编码器按下 D19+D2）
+  - 编译通过，FLASH/RAM 不变
+
 ### Phase 5: 烧录测试
 
 - **Status:** pending
 - **阻塞原因：** PCB 未打板，无法连接 AI32C 硬件
 - **可做验证（无 PCB）：**
   - 烧录固件后验证矩阵/编码器仍正常工作（证明 composite + driver 不崩溃）
-  - 杜邦线将 D2/D3 碰 GND 模拟触摸输出，验证驱动解码逻辑
+  - 杜邦线将 D6/D7 碰 GND 模拟触摸输出，验证驱动解码逻辑
 
 ## Test Results
 | Test | Input | Expected | Actual | Status |

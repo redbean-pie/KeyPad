@@ -16,7 +16,7 @@
 | 锂电池充电 | 单节 LiPo，USB 时充电、拔线后蓝牙工作 |
 | 6×4 矩阵 | 含编码器按下虚拟行 R5 |
 | EC11 编码器 | A/B + 按下 |
-| SSD1306 OLED | 0.91" 128×32，I2C |
+| AI32C 触摸滑块 | 3 通道电容触摸，2 线编码输出（替换 OLED）|
 | 电源开关 | 机械拨动开关控制电池通断 |
 
 ## 2. 系统框图
@@ -36,7 +36,7 @@
         │     ▼                                                     │
         │  VDD(1.7~3.6V) ── 系统 3.3V                              │
         │                                                           │
-        │  GPIO 行/列 ── 矩阵   I2C ── OLED   QDEC ── EC11         │
+        │  GPIO 行/列 ── 矩阵   GPIO ── AI32C 触摸   QDEC ── EC11  │
         │  USB D+/D-        ANT ── PI 匹配 ── 50Ω ── 天线        │
         │  SWD 调试口       RESET 键                             │
         └───────────────────────────────────────────────────────────┘
@@ -99,16 +99,19 @@ R4:  [   0 (2U 宽)   ][  .  ][   ]
 
 - 2U 大键：+ 和 Enter 各 2U 高，0 为 2U 宽（均单轴，覆盖的另一个矩阵位置为空位）
 - 已删 FN 键，编码器按下接管切层（音量/亮度），不再占独立键位
-- 编码器旋钮物理位置由 PCB 决定，按下复用 R5 虚拟行（D10+D9）
+- 编码器旋钮物理位置由 PCB 决定，按下复用 R5 虚拟行（D19+D2）
 
 ### 3.5 编码器 EC11
 - A/B 相各加 RC 去抖（100Ω + 0.1µF，或 0.1µF 到 GND）
 - 公共脚接 GND
-- 按下复用矩阵 R5 虚拟行（D10+D9 现有方案不变）
+- 按下复用矩阵 R5 虚拟行（D19+D2 现有方案不变）
 
-### 3.6 OLED SSD1306
-- I2C：SDA + SCL + 3.3V + GND，4 脚焊接
-- 与 nRF52840 同一 I2C 总线，地址 0x3C
+### 3.6 AI32C 触摸滑块
+- 3 通道电容触摸，SOP-8，2.5-5.5V 供电（整板用 3.3V）
+- 输出 2 线编码（OUT1+OUT2），由 ZMK 自定义 kscan driver 解码
+- 触摸感应盘：PCB 铜箔，3mm×3mm~30mm×30mm，相邻盘间距 >4mm
+- 感应盘底层不铺地，走线尽量短细（<100mm，避开通讯线）
+- 外围：C1=4.7nF NPO、VDD 串 20Ω（不可省）、100nF 退耦、OUT1/OUT2 各 1K 上拉
 
 ### 3.7 Bootloader & SWD
 - nRF52840 空片无 bootloader，**首次必须 J-Link 烧** `nicenano_NRF52840资料/BootLoader/nice_nano/dx_nice_nano_nrf52840_bootloader_s140_6.1.1.hex`
@@ -125,23 +128,25 @@ Zephyr 节点形式：`&gpio0 N` = P0.N，`&gpio1 N` = P1.N。
 
 | 功能 | Pro Micro | nRF52840 | Zephyr 节点 |
 |------|-----------|----------|-------------|
-| 行 R0 | D20 | P0.29 | `&gpio0 29` |
+| 行 R0 | D10 | P0.9 | `&gpio0 9` |
 | 行 R1 | D16 | P0.10 | `&gpio0 10` |
 | 行 R2 | D14 | P1.11 | `&gpio1 11` |
 | 行 R3 | D15 | P1.13 | `&gpio1 13` |
 | 行 R4 | D18 | P1.15 | `&gpio1 15` |
-| 行 R5（编码器按下）| D10 | P0.9 | `&gpio0 9` |
-| 列 C0 | D9 | P1.6 | `&gpio1 6` |
-| 列 C1 | D6 | P1.0 | `&gpio1 0` |
-| 列 C2 | D5 | P0.24 | `&gpio0 24` |
-| 列 C3 | D4 | P0.22 | `&gpio0 22` |
-| EC11 A | D7 | P0.11 | `&gpio0 11` |
-| EC11 B | D8 | P1.4 | `&gpio1 4` |
-| OLED SDA | D2 | P0.17 | `&gpio0 17` |
-| OLED SCL | D3 | P0.20 | `&gpio0 20` |
+| 行 R5（编码器按下）| D19 | P0.2 | `&gpio0 2` |
+| 列 C0 | D2 | P0.17 | `&gpio0 17` |
+| 列 C1 | D3 | P0.20 | `&gpio0 20` |
+| 列 C2 | D4 | P0.22 | `&gpio0 22` |
+| 列 C3 | D5 | P0.24 | `&gpio0 24` |
+| EC11 A | D8 | P1.4 | `&gpio1 4` |
+| EC11 B | D9 | P1.6 | `&gpio1 6` |
+| AI32C OUT1 | D6 | P1.0 | `&gpio1 0` |
+| AI32C OUT2 | D7 | P0.11 | `&gpio0 11` |
+| AI32C VDD | 3.3V | — | 串 20Ω（不可省）|
+| AI32C C1 | — | — | 4.7nF NPO → GND |
 | VBUS 检测（新增）| — | 待分配 | 任一空闲 GPIO |
 | UART（调试，可选）| D0/D1 | P0.8/P0.6 | `&gpio0 8`/`&gpio0 6` |
-| 预留扩展 | D19/D21 | P0.2/P0.31 | `&gpio0 2`/`&gpio0 31` |
+| 预留扩展 | D20/D21 | P0.29/P0.31 | `&gpio0 29`/`&gpio0 31` |
 
 > 整板可重新分配引脚以优化走线，软件侧同步改 overlay 即可。
 
@@ -167,7 +172,7 @@ Zephyr 节点形式：`&gpio0 N` = P0.N，`&gpio1 N` = P1.N。
 | 天线 | 板载 PCB 或陶瓷 | 2.4GHz |
 | 二极管 | 1N4148 / BAT54 | 每键 1 颗 |
 | 编码器 | EC11 | 含按压 |
-| OLED | SSD1306 0.91" 128×32 | I2C |
+| 触摸芯片 | AI32C | SOP-8，3 通道电容触摸 |
 | 接口 | USB-C | 16/24pin |
 | 保护 | DW01 + FS8205A（可选）| 电池保护 |
 
@@ -175,13 +180,13 @@ Zephyr 节点形式：`&gpio0 N` = P0.N，`&gpio1 N` = P1.N。
 
 整板化后 overlay 需从 Pro Micro 抽象解耦，两条路线：
 
-- **方案 A（最小改动，推荐先做）**：仍搭 `nice_nano` board（nRF52840 SoC 配置整板通用），把 overlay 里 `&pro_micro N` 换成 `&gpio0/&gpio1 N` 直连，`&pro_micro_i2c` 换成手写 I2C 节点，去掉 `requires: [pro_micro]`。构建命令不变。用于先验证自定义引脚可编译。
-- **方案 B（原生整板）**：自建 ZMK board（`boards/arm/<板名>/`），矩阵/编码器/OLED 写进 board，构建变 `-b <板名>`，不再需要 shield。改动大但干净，等 PCB 定型后再做。
+- **方案 A（最小改动，推荐先做）**：仍搭 `nice_nano` board（nRF52840 SoC 配置整板通用），把 overlay 里 `&pro_micro N` 换成 `&gpio0/&gpio1 N` 直连，AI32C 触摸已用自定义 kscan driver（`extra-module/drivers/kscan/kscan_gpio_ai32c.c`），去掉 `requires: [pro_micro]`。构建命令不变。用于先验证自定义引脚可编译。
+- **方案 B（原生整板）**：自建 ZMK board（`boards/arm/<板名>/`），矩阵/编码器/AI32C 写进 board，构建变 `-b <板名>`，不再需要 shield。改动大但干净，等 PCB 定型后再做。
 
 ## 8. 推进路线
 
 1. ✅ 功能范围确认（默认全保留）
-2. 原理图：先抄 nice!nano 最小系统 + 电源，再加矩阵/编码器/OLED/USB
+2. 原理图：先抄 nice!nano 最小系统 + 电源，再加矩阵/编码器/AI32C/USB
 3. ERC 检查
 4. PCB 布局布线（4 层优先）
 5. 打样小批量
