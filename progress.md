@@ -117,6 +117,17 @@
   - 文档更新：PINOUT/NOTES/PCB_DESIGN
   - 编译通过，FLASH 25.86%（+0.11%），RAM 18.91%（+0.12%）
 
+### 补充：AI32C 中断驱动 + PM 唤醒（2026-07-31 会话内新增）
+
+- **Status:** complete
+- **需求：** ①触摸空闲空转耗电 ②深睡眠触摸滑块唤醒
+- Actions taken:
+  - 研究 ZMK 低功耗机制：Idle/Deep Sleep/Soft Off 区别，wakeup-source 唤醒原理
+  - 驱动改为中断+轮询混合：空闲 OUT GPIO 中断等触摸（无空转），触摸期间轮询监视释放
+  - 加 PM_DEVICE_DT_INST_DEFINE + pm action + wakeup-source（overlay）
+  - 深睡眠唤醒链：触摸 → OUT 电平变化 → nRF GPIO DETECT → 唤醒（需开 CONFIG_ZMK_SLEEP）
+  - 编译通过，FLASH 25.89%，RAM 18.92%
+
 ### Phase 5: 烧录测试
 
 - **Status:** pending

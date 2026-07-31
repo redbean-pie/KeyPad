@@ -71,6 +71,12 @@ west build -d build
 4. **att.c C99 修复** — `zephyr/subsys/bluetooth/host/att.c` 第 731 行 `default:` 后加空语句（GCC 10 兼容）
 5. **AI32C kscan driver** — 自定义 2 GPIO 解码驱动（`extra-module/drivers/kscan/kscan_gpio_ai32c.c`）
 6. **引脚重排** — 按排针物理位置连续分配，所有信号组物理连续
+7. **AI32C 中断驱动 + PM** — 空闲时 OUT GPIO 中断等待触摸（无轮询空转），触摸期间轮询监视释放；声明 PM + `wakeup-source` 支持深睡眠触摸唤醒
+
+## 低功耗机制
+- **Idle（30s 无操作）**：RGB 自动关（需 `CONFIG_ZMK_RGB_UNDERGLOW_AUTO_OFF_IDLE=y`），AI32C 中断驱动无空转
+- **Deep Sleep（可选）**：开 `CONFIG_ZMK_SLEEP=y` + `CONFIG_ZMK_IDLE_SLEEP_TIMEOUT`，USB 拔出且空闲超时后 `sys_poweroff`；矩阵按键和触摸滑块（wakeup-source）均可唤醒
+- 蓝牙：Idle 保持连接，Deep Sleep 断开
 
 ## 构建产物
 - 路径：`build/zephyr/zmk.uf2`
@@ -88,8 +94,8 @@ west build -d build
 - `56ee32e` feat: 初始化数字小键盘 ZMK 工程
 
 ## 下一步可做
-- 提交引脚重排改动
 - 烧录测试：杜邦线模拟 AI32C 输出（D6/D7 碰 GND）验证解码
 - PCB 打板后真实触摸测试
+- 启用 deep sleep：`CONFIG_ZMK_SLEEP=y`（AI32C 驱动已支持触摸唤醒）
+- 启用 idle 自动关 RGB：`CONFIG_ZMK_RGB_UNDERGLOW_AUTO_OFF_IDLE=y`
 - 启用串口调试（D0/D1 已保留）
-- 深睡眠 `CONFIG_ZMK_SLEEP=y`（`config/numpad.conf` 已注释）
