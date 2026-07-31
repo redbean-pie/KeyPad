@@ -3,8 +3,8 @@
 ## 项目概况
 - **类型**：ZMK 数字小键盘固件
 - **板子**：nice!nano v2（nRF52840，Pro Micro 兼容接口）
-- **Shield**：numpad（5×4 矩阵 + EC11 旋钮 + SSD1306 OLED 0.91" 128×32）
-- **当前状态**：固件编译通过 ✅
+- **Shield**：numpad（6×4 矩阵含编码器按下虚拟行 + EC11 旋钮 + SSD1306 OLED 0.91" 128×32）
+- **当前状态**：标准 numpad 布局（删 FN、0 改 2U 宽、编码器按下切层），编译通过 ✅
 
 ## 引脚分配
 
@@ -62,17 +62,19 @@ west build -d build
 
 ## 构建产物
 - 路径：`build/zephyr/zmk.uf2`
-- 大小：645120 字节
-- 内存：FLASH 39.76% / RAM 21.11%
+- 大小：648192 字节
+- 内存：FLASH 39.94% / RAM 21.34%
 - 刷入：拖入 nice!nano v2 USB 存储器
 
 ## 提交记录
 - `56ee32e` feat: 初始化数字小键盘 ZMK 工程
 - `6f6b747` fix: 补 config/west.yml 并改用 nice_nano//zmk variant
 - `f8c2a01` feat: 适配 ZMK main 分支并支持本地工具链构建
+- `a830daf` feat: 重新设计布局并实现编码器双模式切换
 
 ## 下一步可做
-- 烧录测试
+- 提交当前标准布局改动
+- 烧录 nice!nano 测试（0 需外部 PCB 做成 2U 宽）
 - 启用串口调试（D0/D1 已释放）
 - 深睡眠 `CONFIG_ZMK_SLEEP=y`（`config/numpad.conf` 已注释）
 - 扩展未使用引脚功能

@@ -4,13 +4,13 @@
  *
  * 布局（6行4列，R5为编码器按下虚拟行）：
  *  | Num | /   | *   | -     |
- *  | 7   | 8   | 9   | (2U+) |   R1C3 空位
+ *  | 7   | 8   | 9   | (2U+) |   R1C3 空位(+轴在R2C3)
  *  | 4   | 5   | 6   | +     |
- *  | 1   | 2   | 3   | (2UE) |   R3C3 空位
- *  | FN  | 0   | .   | Enter |
- *  | ENC | -   | -   | -     |   R5C0 编码器按下(D10)
+ *  | 1   | 2   | 3   | (2UE) |   R3C3 空位(Enter轴在R4C3)
+ *  |(0,2U宽)| . | Enter |     |   R4C0 空(0为2U宽,轴在R4C1)
+ *  | ENC | -   | -   | -     |   R5C0 编码器按下=切层
  *
- * FN 单键切换编码器模式：层0=音量 / 层1=亮度
+ * 编码器按下切换模式：层0=音量 / 层1=亮度
  * 组合键进 bootloader/reset（参考 murphpad）
  */
 #include <behaviors.dtsi>
@@ -44,7 +44,7 @@
     keymap: keymap {
         compatible = "zmk,keymap";
 
-        // 默认层：编码器 = 音量 ±，按下 = 静音
+        // 默认层：编码器 = 音量 ±，按下 = 切到亮度层
         default_layer {
             display-name = "Numpad";
             bindings = <
@@ -52,13 +52,13 @@
 &kp KP_N7      &kp KP_N8       &kp KP_N9         &none
 &kp KP_N4      &kp KP_N5       &kp KP_N6         &kp KP_PLUS
 &kp KP_N1      &kp KP_N2       &kp KP_N3         &none
-&to 1          &kp KP_N0       &kp KP_DOT        &kp KP_ENTER
-&kp C_MUTE     &none           &none             &none
+&none          &kp KP_N0       &kp KP_DOT        &kp KP_ENTER
+&to 1          &none           &none             &none
             >;
             sensor-bindings = <&inc_dec_kp C_VOL_UP C_VOL_DN>;
         };
 
-        // 亮度层：编码器 = 亮度 ±，按下 = 静音
+        // 亮度层：编码器 = 亮度 ±，按下 = 切回音量层
         fn_layer {
             display-name = "Bright";
             bindings = <
@@ -66,8 +66,8 @@
 &trans         &trans          &trans            &none
 &trans         &trans          &trans            &trans
 &trans         &trans          &trans            &none
-&to 0          &trans          &trans            &trans
-&trans         &none           &none             &none
+&none          &trans          &trans            &trans
+&to 0          &none           &none             &none
             >;
             sensor-bindings = <&inc_dec_kp C_BRI_UP C_BRI_DN>;
         };
