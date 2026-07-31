@@ -3,7 +3,7 @@
 ## 项目概况
 - **类型**：ZMK 数字小键盘固件
 - **板子**：nice!nano v2（nRF52840，Pro Micro 兼容接口）
-- **Shield**：numpad（6×4 矩阵含编码器按下虚拟行 + EC11 旋钮 + SSD1306 OLED 0.91" 128×32）
+- **Shield**：numpad（6×4 矩阵含编码器按下虚拟行 + EC11 旋钮 + AI32C 触摸滑块）
 - **当前状态**：标准 numpad 布局（删 FN、0 改 2U 宽、编码器按下切层），编译通过 ✅
 
 ## 引脚分配
@@ -22,12 +22,11 @@
 | 矩阵列 C3 | D4 / A6 | P0.22 |
 | EC11 A 相 | D7 | P0.11 |
 | EC11 B 相 | D8 / A8 | P1.4 |
-| I2C SDA（OLED） | D2 | P0.17 |
-| I2C SCL（OLED） | D3 | P0.20 |
+| AI32C OUT1 | D2 | P0.17 | 触摸数据通道1 |
+| AI32C OUT2 | D3 | P0.20 | 触摸数据通道2 |
 | UART RX（空闲） | D0 | P0.8 |
-| UART TX（空闲） | D1 | P0.6 |
 
-**未使用引脚**：D19/A1（预留拨动开关）、D21/A3 可作扩展。
+**未使用引脚**：D19/A1（预留拨动开关）、D21/A3 可作扩展。D0 空闲（UART RX 备用）。D1 已释放（原误分配给 AI32C T3）。D2/D3 已分配给 AI32C OUT1/OUT2。
 
 ## 构建方法
 
@@ -73,8 +72,9 @@ west build -d build
 - `a830daf` feat: 重新设计布局并实现编码器双模式切换
 
 ## 下一步可做
+- 编写 AI32C 自定义 ZMK kscan driver（2 GPIO 解码为 3 键）
+- 编译验证 AI32C driver 集成后固件正常
+- 烧录测试触摸滑块三通道
 - 提交当前标准布局改动
-- 烧录 nice!nano 测试（0 需外部 PCB 做成 2U 宽）
-- 启用串口调试（D0/D1 已释放）
+- 启用串口调试（D0 已释放）
 - 深睡眠 `CONFIG_ZMK_SLEEP=y`（`config/numpad.conf` 已注释）
-- 扩展未使用引脚功能

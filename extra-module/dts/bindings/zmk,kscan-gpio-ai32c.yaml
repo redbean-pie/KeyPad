@@ -1,0 +1,22 @@
+# Copyright (c) 2026
+# SPDX-License-Identifier: MIT
+
+description: AI32C 3-channel capacitive touch kscan driver
+
+compatible: "zmk,kscan-gpio-ai32c"
+
+include: kscan.yaml
+
+properties:
+  out-gpios:
+    type: phandle-array
+    required: true
+    description: |
+      Two GPIOs connected to AI32C OUT1 and OUT2.
+      OUT1 = index 0, OUT2 = index 1.
+      Must be configured as pull-up inputs (GPIO_ACTIVE_LOW | GPIO_PULL_UP).
+
+  poll-period-ms:
+    type: int
+    default: 10
+    description: Polling interval in milliseconds.

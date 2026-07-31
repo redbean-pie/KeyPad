@@ -2,13 +2,16 @@
  * Copyright (c) 2026
  * SPDX-License-Identifier: MIT
  *
- * 布局（6行4列，R5为编码器按下虚拟行）：
- *  | Num | /   | *   | -     |
+ * 布局（9行4列，R5=编码器按下，R6-R8=触摸滑块）：
+ *  | Num | /   | *   | -     |   R0
  *  | 7   | 8   | 9   | (2U+) |   R1C3 空位(+轴在R2C3)
- *  | 4   | 5   | 6   | +     |
+ *  | 4   | 5   | 6   | +     |   R2
  *  | 1   | 2   | 3   | (2UE) |   R3C3 空位(Enter轴在R4C3)
  *  |(0,2U宽)| . | Enter |     |   R4C0 空(0为2U宽,轴在R4C1)
  *  | ENC | -   | -   | -     |   R5C0 编码器按下=切层
+ *  | T1  | -   | -   | -     |   R6C0 触摸滑块 Z1→静音
+ *  | T2  | -   | -   | -     |   R7C0 触摸滑块 Z2→上一曲
+ *  | T3  | -   | -   | -     |   R8C0 触摸滑块 Z3→下一曲
  *
  * 编码器按下切换模式：层0=音量 / 层1=亮度
  * 组合键进 bootloader/reset（参考 murphpad）
@@ -54,6 +57,9 @@
 &kp KP_N1      &kp KP_N2       &kp KP_N3         &none
 &none          &kp KP_N0       &kp KP_DOT        &kp KP_ENTER
 &to 1          &none           &none             &none
+&kp C_MUTE     &none           &none             &none
+&kp C_PREV     &none           &none             &none
+&kp C_NEXT     &none           &none             &none
             >;
             sensor-bindings = <&inc_dec_kp C_VOL_UP C_VOL_DN>;
         };
@@ -68,6 +74,9 @@
 &trans         &trans          &trans            &none
 &none          &trans          &trans            &trans
 &to 0          &none           &none             &none
+&kp C_MUTE     &none           &none             &none
+&kp C_PREV     &none           &none             &none
+&kp C_NEXT     &none           &none             &none
             >;
             sensor-bindings = <&inc_dec_kp C_BRI_UP C_BRI_DN>;
         };
