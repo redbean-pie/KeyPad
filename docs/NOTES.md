@@ -74,9 +74,9 @@ west build -d build
 7. **AI32C 中断驱动 + PM** — 空闲时 OUT GPIO 中断等待触摸（无轮询空转），触摸期间轮询监视释放；声明 PM + `wakeup-source` 支持深睡眠触摸唤醒
 
 ## 低功耗机制
-- **Idle（30s 无操作）**：RGB 自动关（需 `CONFIG_ZMK_RGB_UNDERGLOW_AUTO_OFF_IDLE=y`），AI32C 中断驱动无空转
-- **Deep Sleep（可选）**：开 `CONFIG_ZMK_SLEEP=y` + `CONFIG_ZMK_IDLE_SLEEP_TIMEOUT`，USB 拔出且空闲超时后 `sys_poweroff`；矩阵按键和触摸滑块（wakeup-source）均可唤醒
-- 蓝牙：Idle 保持连接，Deep Sleep 断开
+- **Idle（2 分钟无操作）**：RGB 自动关，AI32C 中断驱动无空转，蓝牙保持
+- **Deep Sleep（无 USB + 空闲 15 分钟）**：`sys_poweroff` 彻底断电，蓝牙断开；矩阵按键和触摸滑块（wakeup-source）均可唤醒
+- 已启用：`CONFIG_ZMK_IDLE_TIMEOUT=120000`、`CONFIG_ZMK_RGB_UNDERGLOW_AUTO_OFF_IDLE=y`、`CONFIG_ZMK_SLEEP=y`、`CONFIG_ZMK_IDLE_SLEEP_TIMEOUT=900000`
 
 ## 构建产物
 - 路径：`build/zephyr/zmk.uf2`
