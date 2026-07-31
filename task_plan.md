@@ -24,7 +24,7 @@ Phase 4
 - [x] 创建 DT binding (`extra-module/dts/bindings/zmk,kscan-gpio-ai32c.yaml`)
 - [x] 更新模块构建系统 (module.yml, CMakeLists.txt, Kconfig)
 - [x] 更新 `numpad.overlay` 为 composite 结构（kscan_matrix + kscan_ai32c）
-- [x] 更新 `numpad.keymap` 为 9 行布局，触摸键映射 C_MUTE/C_PREV/C_NEXT
+- [x] 更新 `numpad.keymap` 为 8 行布局，触摸键映射 C_MUTE/C_PREV/C_NEXT
 - [x] 驱动架构：2 GPIO 轮询 (10ms) → 2-bit 解码 → 3 个独立 key 事件
 - **Status:** complete
 
