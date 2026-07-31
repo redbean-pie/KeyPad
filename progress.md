@@ -128,6 +128,17 @@
   - 深睡眠唤醒链：触摸 → OUT 电平变化 → nRF GPIO DETECT → 唤醒（需开 CONFIG_ZMK_SLEEP）
   - 编译通过，FLASH 25.89%，RAM 18.92%
 
+### 补充：充电状态 + 蓝牙 LED（2026-07-31 会话内新增）
+
+- **Status:** complete
+- **充电状态显示**：扩展 battery_led，监听 USB 连接事件
+  - USB 供电 + <100%：2 颗橙闪（充电中）；≥100%：2 颗绿（充满）
+  - 充电显示优先于 fn 层电量
+- **蓝牙状态 LED**：新增 `extra-module/ble_led`，D21 直驱蓝灯
+  - 监听 zmk_ble_active_profile_changed，已连接常亮/未连接 500ms 闪烁
+  - overlay 加 ble_leds 节点（gpio-leds）
+- 编译通过，FLASH 26.17% / RAM 19.05%
+
 ### Phase 5: 烧录测试
 
 - **Status:** pending
