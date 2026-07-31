@@ -77,7 +77,11 @@ AI32C 是 AI32 的低功耗增强版，引脚兼容。
 | AI32C 替代 OLED 而非共存 | OLED 已完全移除，释放 I2C 引脚 |
 | D6→OUT1, D7→OUT2（仅 2 GPIO）| AI32C 为 2 线编码输出，非 3 路独立 |
 | 需自定义 ZMK kscan driver | ZMK 无内置二进制解码 kscan |
-| 暂不启用深睡眠 | 等触摸功能稳定后再考虑 |
+| AI32C 中断+轮询混合驱动 | 空闲无轮询空转（省电）+ PM 深睡眠触摸唤醒 |
+| WS2812 主链/电量链独立 SPI | rgb_underglow 50ms 覆盖整链，共享会冲突 |
+| 蓝牙 LED 直驱 D21 | 独立单色灯，不占 WS2812 电量灯 |
+| 低功耗 Idle+Deep Sleep 已启用 | AI32C 自睡眠 7µA + ZMK 自动待机/断电 |
+| 电源开关 DPDT 正负极双断 | 彻底断电；USB 供电路径独立 |
 | nice!nano 3.3V 直接供电 AI32C | 在 2.5-5.5V 范围内 |
 
 ## Issues Encountered
