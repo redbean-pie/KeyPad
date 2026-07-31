@@ -8,16 +8,19 @@
  * 引脚分配（按排针物理位置连续）：
  *   左列 D2-D9：C0=D2 C1=D3 C2=D4 C3=D5 | AI32C: OUT1=D6 OUT2=D7 | EC11: A=D8 B=D9
  *   右列 D10-D18：R0=D10 R1=D16 R2=D14 R3=D15 R4=D18
- *   预留：D0/D1（串口）、D19/D20/D21
+ *   WS2812: DATA=D20 (P0.29, SPIM3 MOSI)
+ *   预留：D0/D1（串口）、D19/D21
  *
  * 编码器按压：复用矩阵 R4C0（0 行空位，行 D18 + 列 D2），不再需要独立虚拟行
  */
 #include <dt-bindings/zmk/matrix_transform.h>
+#include <dt-bindings/led/led.h>
 
 / {
     chosen {
         zmk,kscan = &kscan;
         zmk,physical-layout = <&numpad_layout>;
+        zmk,underglow = &led_strip;
     };
 
     /* Composite kscan: matrix + AI32C touch */
@@ -116,4 +119,42 @@ RC(7,0) RC(7,1) RC(7,2) RC(7,3)
 
 &encoder {
     status = "okay";
+};
+
+/* WS2812 RGB 灯珠：SPIM3 MOSI = D20 (P0.29)，每键 1 颗共 19 颗 */
+&pinctrl {
+    spi3_default: spi3_default {
+        group1 {
+            psels = <NRF_PSEL(SPIM_MOSI, 0, 29)>;
+        };
+    };
+
+    spi3_sleep: spi3_sleep {
+        group1 {
+            psels = <NRF_PSEL(SPIM_MOSI, 0, 29)>;
+            low-power-enable;
+        };
+    };
+};
+
+&spi3 {
+    compatible = "nordic,nrf-spim";
+    status = "okay";
+
+    pinctrl-0 = <&spi3_default>;
+    pinctrl-1 = <&spi3_sleep>;
+    pinctrl-names = "default", "sleep";
+
+    led_strip: ws2812@0 {
+        compatible = "worldsemi,ws2812-spi";
+        reg = <0>; /* ignored, but necessary for SPI bindings */
+        spi-max-frequency = <4000000>;
+
+        /* WS2812 */
+        chain-length = <19>; /* 每键 1 颗，共 19 颗 */
+        spi-one-frame = <0x70>;
+        spi-zero-frame = <0x40>;
+
+        color-mapping = <LED_COLOR_ID_GREEN LED_COLOR_ID_RED LED_COLOR_ID_BLUE>;
+    };
 };

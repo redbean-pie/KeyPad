@@ -17,6 +17,7 @@
 | 5×4 矩阵 | 编码器按压复用 R4C0 空位 |
 | EC11 编码器 | A/B + 按下 |
 | AI32C 触摸滑块 | 3 通道电容触摸，2 线编码输出（替换 OLED）|
+| WS2812 RGB | 每键 1 颗共 19 颗，SPIM3 驱动 |
 | 电源开关 | 机械拨动开关控制电池通断 |
 
 ## 2. 系统框图
@@ -37,6 +38,7 @@
         │  VDD(1.7~3.6V) ── 系统 3.3V                              │
         │                                                           │
         │  GPIO 行/列 ── 矩阵   GPIO ── AI32C 触摸   QDEC ── EC11  │
+        │  SPIM3 ── WS2812×19                                     │
         │  USB D+/D-        ANT ── PI 匹配 ── 50Ω ── 天线        │
         │  SWD 调试口       RESET 键                             │
         └───────────────────────────────────────────────────────────┘
@@ -113,12 +115,18 @@ R4:  [   0 (2U 宽)   ][  .  ][   ]
 - 感应盘底层不铺地，走线尽量短细（<100mm，避开通讯线）
 - 外围：C1=4.7nF NPO、VDD 串 20Ω（不可省）、100nF 退耦、OUT1/OUT2 各 1K 上拉
 
-### 3.7 Bootloader & SWD
+### 3.7 WS2812 RGB 灯珠
+- 每键 1 颗共 19 颗，SPIM3 MOSI（D20 / P0.29）驱动，4MHz
+- **供电**：从 VDDH/RAW 取电（勿用 3.3V），每颗全白约 60mA，19 颗 ≈ 1.2A
+- 每 5-10 颗加 100nF 去耦电容，靠近灯珠
+- DATA 走线尽量短，远离电源/干扰线；软件限制最大亮度保护电池
+
+### 3.8 Bootloader & SWD
 - nRF52840 空片无 bootloader，**首次必须 J-Link 烧** `nicenano_NRF52840资料/BootLoader/nice_nano/dx_nice_nano_nrf52840_bootloader_s140_6.1.1.hex`
 - 烧完后才能 USB 拖拽 uf2
 - 工具：J-Link + nRF Connect Programmer（资料 `软件工具/` 内）
 
-### 3.8 LED 指示（可选）
+### 3.9 LED 指示（可选）
 - 充电状态 LED（红/蓝，充电 IC 输出驱动）
 - 蓝牙/系统 LED（GPIO 驱动）
 
@@ -143,9 +151,10 @@ Zephyr 节点形式：`&gpio0 N` = P0.N，`&gpio1 N` = P1.N。
 | AI32C OUT2 | D7 | P0.11 | `&gpio0 11` |
 | AI32C VDD | 3.3V | — | 串 20Ω（不可省）|
 | AI32C C1 | — | — | 4.7nF NPO → GND |
+| WS2812 DATA | D20 | P0.29 | `&gpio0 29` | SPIM3 MOSI，4MHz |
 | VBUS 检测（新增）| — | 待分配 | 任一空闲 GPIO |
 | UART（调试，可选）| D0/D1 | P0.8/P0.6 | `&gpio0 8`/`&gpio0 6` |
-| 预留扩展 | D19/D20/D21 | P0.2/P0.29/P0.31 | `&gpio0 2`/`&gpio0 29`/`&gpio0 31` |
+| 预留扩展 | D19/D21 | P0.2/P0.31 | `&gpio0 2`/`&gpio0 31` |
 
 > 整板可重新分配引脚以优化走线，软件侧同步改 overlay 即可。
 
@@ -172,6 +181,7 @@ Zephyr 节点形式：`&gpio0 N` = P0.N，`&gpio1 N` = P1.N。
 | 二极管 | 1N4148 / BAT54 | 每键 1 颗 |
 | 编码器 | EC11 | 含按压 |
 | 触摸芯片 | AI32C | SOP-8，3 通道电容触摸 |
+| RGB 灯珠 | WS2812 | 每键 1 颗，19 颗 |
 | 接口 | USB-C | 16/24pin |
 | 保护 | DW01 + FS8205A（可选）| 电池保护 |
 

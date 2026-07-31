@@ -94,6 +94,17 @@
   - 更新 PINOUT/NOTES/PCB_DESIGN
   - 编译通过，FLASH 24.85%（-0.02%）
 
+### 补充：WS2812 RGB 灯珠（2026-07-31 会话内新增）
+
+- **Status:** complete
+- Actions taken:
+  - overlay: 自定义 spi3（SPIM3 MOSI=P0.29/D20）+ led_strip（ws2812-spi, chain-length=19）
+  - chosen: zmk,underglow = &led_strip
+  - conf: CONFIG_ZMK_RGB_UNDERGLOW=y
+  - keymap: fn 层数字区加 RGB 控制键（TOG/BRI/BRD/EFF）
+  - 文档更新：PINOUT/NOTES/PCB_DESIGN
+  - 编译通过，FLASH 25.75%（+0.88%），RAM 18.79%（+0.33%）
+
 ### Phase 5: 烧录测试
 
 - **Status:** pending
@@ -101,6 +112,7 @@
 - **可做验证（无 PCB）：**
   - 烧录固件后验证矩阵/编码器仍正常工作（证明 composite + driver 不崩溃）
   - 杜邦线将 D6/D7 碰 GND 模拟触摸输出，验证驱动解码逻辑
+  - RGB 灯珠接线后验证发光
 
 ## Test Results
 | Test | Input | Expected | Actual | Status |
