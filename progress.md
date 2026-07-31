@@ -81,6 +81,19 @@
   - 更新 PCB_DESIGN.md（OLED→AI32C，引脚表，编码器按下 D19+D2）
   - 编译通过，FLASH/RAM 不变
 
+### 补充：编码器按压复用 R4C0（2026-07-31 会话内新增）
+
+- **Status:** complete
+- **原因：** 用户提出 0 行只有 3 个实际按键，R4C0 空位可直接复用为编码器按压，省掉 R5 虚拟行
+- Actions taken:
+  - 矩阵从 6×4 缩为 5×4，删除 R5 虚拟行
+  - 编码器按压从 R5C0（D19+D2）移到 R4C0（D18+D2），列不变
+  - composite touch row-offset 6→5，transform 9行→8行
+  - keymap 删一行，R4C0 = &to 1（切层）
+  - 释放 D19
+  - 更新 PINOUT/NOTES/PCB_DESIGN
+  - 编译通过，FLASH 24.85%（-0.02%）
+
 ### Phase 5: 烧录测试
 
 - **Status:** pending

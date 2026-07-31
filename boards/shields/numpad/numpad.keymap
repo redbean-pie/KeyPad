@@ -2,18 +2,17 @@
  * Copyright (c) 2026
  * SPDX-License-Identifier: MIT
  *
- * 布局（9行4列，R5=编码器按下，R6-R8=触摸滑块）：
+ * 布局（8行4列，R4C0=编码器按压，R5-R7=触摸滑块）：
  *  | Num | /   | *   | -     |   R0
  *  | 7   | 8   | 9   | (2U+) |   R1C3 空位(+轴在R2C3)
  *  | 4   | 5   | 6   | +     |   R2
  *  | 1   | 2   | 3   | (2UE) |   R3C3 空位(Enter轴在R4C3)
- *  |(0,2U宽)| . | Enter |     |   R4C0 空(0为2U宽,轴在R4C1)
- *  | ENC | -   | -   | -     |   R5C0 编码器按下=切层
- *  | T1  | -   | -   | -     |   R6C0 触摸滑块 Z1→静音
- *  | T2  | -   | -   | -     |   R7C0 触摸滑块 Z2→上一曲
- *  | T3  | -   | -   | -     |   R8C0 触摸滑块 Z3→下一曲
+ *  |ENC |  0  |  .  | Enter |   R4C0 编码器按压=切层(0为2U宽,轴在R4C1)
+ *  | T1  | -   | -   | -     |   R5C0 触摸滑块 Z1→静音
+ *  | T2  | -   | -   | -     |   R6C0 触摸滑块 Z2→上一曲
+ *  | T3  | -   | -   | -     |   R7C0 触摸滑块 Z3→下一曲
  *
- * 编码器按下切换模式：层0=音量 / 层1=亮度
+ * 编码器按压切换模式：层0=音量 / 层1=亮度
  * 组合键进 bootloader/reset（参考 murphpad）
  */
 #include <behaviors.dtsi>
@@ -47,7 +46,7 @@
     keymap: keymap {
         compatible = "zmk,keymap";
 
-        // 默认层：编码器 = 音量 ±，按下 = 切到亮度层
+        // 默认层：编码器 = 音量 ±，按压 = 切到亮度层
         default_layer {
             display-name = "Numpad";
             bindings = <
@@ -55,8 +54,7 @@
 &kp KP_N7      &kp KP_N8       &kp KP_N9         &none
 &kp KP_N4      &kp KP_N5       &kp KP_N6         &kp KP_PLUS
 &kp KP_N1      &kp KP_N2       &kp KP_N3         &none
-&none          &kp KP_N0       &kp KP_DOT        &kp KP_ENTER
-&to 1          &none           &none             &none
+&to 1          &kp KP_N0       &kp KP_DOT        &kp KP_ENTER
 &kp C_MUTE     &none           &none             &none
 &kp C_PREV     &none           &none             &none
 &kp C_NEXT     &none           &none             &none
@@ -64,7 +62,7 @@
             sensor-bindings = <&inc_dec_kp C_VOL_UP C_VOL_DN>;
         };
 
-        // 亮度层：编码器 = 亮度 ±，按下 = 切回音量层
+        // 亮度层：编码器 = 亮度 ±，按压 = 切回音量层
         fn_layer {
             display-name = "Bright";
             bindings = <
@@ -72,8 +70,7 @@
 &trans         &trans          &trans            &none
 &trans         &trans          &trans            &trans
 &trans         &trans          &trans            &none
-&none          &trans          &trans            &trans
-&to 0          &none           &none             &none
+&to 0          &trans          &trans            &trans
 &kp C_MUTE     &none           &none             &none
 &kp C_PREV     &none           &none             &none
 &kp C_NEXT     &none           &none             &none
