@@ -34,7 +34,9 @@
 
 **WS2812**：
 - 主链：每键 1 颗共 19 颗，`chain-length=19`，DATA=D20（SPIM3），rgb_underglow 管理
-- 电量链：2 颗独立，`chain-length=2`，DATA=D19（SPIM2），`extra-module/battery_led` 模块管理，进 fn 层显示 2 秒
+- 电量链：2 颗独立，`chain-length=2`，DATA=D19（SPIM2），`extra-module/battery_led` 模块管理
+  - **充电状态（USB 供电时持续显示）**：电量 <100% 2 颗橙闪（充电中）/ ≥100% 2 颗绿（充满）
+  - 非充电时：进 fn 层显示电量 2 秒（绿/红分级）
 - 供电从 RAW 取（勿用 3.3V），每 5-10 颗加 100nF 去耦
 
 **未使用引脚**：D21（右6）空闲可扩展。D0/D1 保留给串口调试，不占用。
