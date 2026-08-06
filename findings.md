@@ -83,6 +83,21 @@ AI32C 是 AI32 的低功耗增强版，引脚兼容。
 | 低功耗 Idle+Deep Sleep 已启用 | AI32C 自睡眠 7µA + ZMK 自动待机/断电 |
 | 电源开关 DPDT 正负极双断 | 彻底断电；USB 供电路径独立 |
 | nice!nano 3.3V 直接供电 AI32C | 在 2.5-5.5V 范围内 |
+| **滑条 sensor 方案废弃（2026-08-06）** | 死机 + 无反应：holding 20Hz 触发堵塞 behavior queue；依赖 ZMK `behavior_sensor_rotate_common.c` 第 29 行 legacy compat 路径（标记 REMOVE ME）未来失效；PM RESUME 死锁边界 |
+| **回退 kscan 触摸键方案** | 3 个独立按键，每层独立功能；ZMK 标准 kscan API 稳定，无 legacy 依赖 |
+
+## 滑条方案 vs kscan 触摸键方案对比
+
+| 维度 | 滑条 sensor（已废弃） | kscan 触摸键（当前） |
+|------|-------|-------|
+| ZMK API | sensor_driver_api + trigger_set | kscan_driver_api |
+| 数据流 | OUT1/OUT2 → zone 解码 → delta → sensor_value | OUT1/OUT2 → key 解码 → kscan_callback |
+| 触发模式 | 持续触发（holding 时重复） | 按下/松开事件（一次性） |
+| keymap 绑定 | sensor-bindings（inc_dec_kp） | 普通 keymap 矩阵位置 |
+| 切层能力 | 无法切层（sensor 不参与 layer） | 可切层（按键可绑 &to N） |
+| 行为队列压力 | 高（holding 20Hz × 2 queue_add） | 低（按下 1 次 1 个事件） |
+| ZMK 兼容性 | 依赖 legacy compat 路径（待移除） | 标准 kscan，长期稳定 |
+| PM 唤醒 | 支持 | 支持 |
 
 ## Issues Encountered
 | Issue | Resolution |
@@ -106,3 +121,56 @@ AI32C 是 AI32 的低功耗增强版，引脚兼容。
 ---
 *Update this file after every 2 view/browser/search operations*
 *This prevents visual information from being lost*
+
+## 2026-08-06 补充发现：AI32C 输出类型 + LDO 损坏根因
+
+### AI32C OUT 是 push-pull 输出（非开漏）
+- 数据手册典型应用电路图虽画了 1K 上拉，但实测 AI32C OUT 空闲时主动输出高电平（接近 VDD）
+- **不需要 PULL_UP**：驱动改为纯输入（gpio_pin_configure 忽略 dt_flags）
+- 飞线 5V 供电时，PULL_UP 拉到 3.3V 会与 5V 输出冲突，必须去掉 PULL_UP
+
+### nice!nano 3.3V LDO 损坏（触摸无反应根因）
+- **现象**：AI32C VDD=0V，OUT 输出默认低(00)被误判 KEY1 持续触摸
+- **排查**：init 时 PULL_UP 拉高 raw=1（证明引脚没短路），但运行后 poll 读到 00；高阻模式仍 00 -> AI32C 自己输出
+- **根因**：nice!nano 板载 3.3V LDO 稳压器损坏（输出 0V），AI32C 从未通电
+- **验证**：万用表测 VCC 引脚=0V，VCC 对 GND 高阻（无短路），AI32C pin7/8 高阻（无击穿）
+- **修复**：飞线 nice!nano RAW（4.1V 电池/5V USB）-> AI32C VDD，通电后空闲变 11，触摸恢复
+- **待办**：RAW 电压超 nRF52840 3.6V 上限，需换 3.3V LDO（AMS1117-3.3）或修板载 LDO
+
+### GPIOTE 中断不触发（已用 poll 绕过）
+- EDGE_BOTH 中断配置成功（err=0），但短接/触摸不触发 IRQ
+- 原因可能：ZMK composite 不调 enable_callback（已改 init 启动）；或 GPIOTE 通道问题
+- **解决方案**：改用 poll 模式（10ms），彻底绕开中断，已验证可靠
+
+### 编码表修正（findings.md 第 23-28 行列顺序）
+数据手册原表（OUT2 在前，OUT1 在后）：
+| 触摸 | OUT2 | OUT1 |
+|------|------|------|
+| KEY1 | 0 | 0 |
+| KEY2 | 0 | 1 |
+| KEY3 | 1 | 0 |
+| 无   | 1 | 1 |
+
+驱动读取顺序：o1=OUT1(pin6/D6), o2=OUT2(pin5/D7)，编码(o1,o2)：
+- 00=KEY1  10=KEY2  01=KEY3  11=空闲
+（实测验证：摸 KEY2 得 o1=1 o2=0，摸 KEY3 得 o1=0 o2=1，符合）
+
+## 2026-08-06 补充发现：三层 keymap 编译的 4 个阻塞根因
+
+### 1. `spi1_sleep lacks #sensor-binding-cells` = keymap 的 phandle-array cell 错位
+- 触发机制：`sensor-bindings` 是 phandle-array，specifier 由属性名去掉末尾 's' 得 "sensor-binding"，每个 phandle 目标需有 `#sensor-binding-cells`（edtlib `_phandle_val_list`，`_err(f"{node!r} lacks {full_n_cells_name}")`）
+- 根因：`RGB_BRI`/`RGB_BRD` 宏各展开成 2 值（`RGB_BRI_CMD 0` = `7 0`），`&inc_dec_kp RGB_BRI RGB_BRD` 变成 phandle+4 cells 而 inc_dec_kp 只吃 2，错位把 `8` 当 phandle 解析到 spi1_sleep
+- 关键认知：**ZMK rgb.h 里 RGB_* 宏是给 rgb_ug 用的双值宏（cmd+arg），不能当 inc_dec_kp 的 sensor 参数**
+- 修复：自定义非 var 版 `zmk,behavior-sensor-rotate`（`bindings=<&rgb_ug RGB_BRI>,<&rgb_ug RGB_BRD>`），rgb_layer 用 `<&inc_dec_rgb>`。非 var 版 `#sensor-binding-cells=0`，参数内联进 bindings
+
+### 2. Kconfig 递归 = ZMK_EXTRA_MODULES 污染 + 根 module.yml 无 kconfig
+- `zephyr/module.yml`（用户有意创建、被 git 跟踪，只有 `board_root: .`）用于把 workspace 根注册为 board root（发现 numpad shield）
+- 但它没有 cmake/kconfig：当 `ZMK_EXTRA_MODULES` 被污染成 workspace 根时（构建不带 `-C zmk-cache.cmake`），Zephyr 把根当模块、Kconfig 默认落到 `zephyr/Kconfig` 自身 → 递归
+- 修复：固定用带 `-C zmk-cache.cmake` 的命令（`ZMK_EXTRA_MODULES=extra-module`），根不再被扫描。文件保留
+
+### 3. `extra-module__drivers__kscan` target 不存在 = 旧的 zephyr_library_amend()
+- kscan CMakeLists 用 `zephyr_library_amend()`（无当前库上下文报错），改 `zephyr_library()` + include 目录
+
+### 4. 正确构建命令必须带 `-C zmk-cache.cmake`
+- 全量：`west build -s zmk/app -b nice_nano//zmk -d build -- -C zmk-cache.cmake -DSHIELD=numpad`
+- 增量 `west build -d build` 只在缓存未污染时可用

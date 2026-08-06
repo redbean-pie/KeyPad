@@ -2,18 +2,19 @@
  * Copyright (c) 2026
  * SPDX-License-Identifier: MIT
  *
- * 布局（8行4列，R4C0=编码器按压，R5-R7=触摸滑块）：
+ * 布局（6行4列，R4C0=编码器按压切层，R5=AI32C 触摸键）：
  *  | Num | /   | *   | -     |   R0
- *  | 7   | 8   | 9   | (2U+) |   R1C3 空位(+轴在R2C3)
+ *  | 7   | 8   | 9   | (空)  |   R1
  *  | 4   | 5   | 6   | +     |   R2
- *  | 1   | 2   | 3   | (2UE) |   R3C3 空位(Enter轴在R4C3)
- *  |ENC |  0  |  .  | Enter |   R4C0 编码器按压=切层(0为2U宽,轴在R4C1)
- *  | T1  | -   | -   | -     |   R5C0 触摸滑块 Z1→静音
- *  | T2  | -   | -   | -     |   R6C0 触摸滑块 Z2→上一曲
- *  | T3  | -   | -   | -     |   R7C0 触摸滑块 Z3→下一曲
+ *  | 1   | 2   | 3   | (空)  |   R3
+ *  |ENC |  0  |  .  | Enter |   R4 编码器按压=切层
+ *  | T1  | T2  | T3  | -     |   R5 = AI32C 触摸键
  *
- * 编码器按压切换模式：层0=音量 / 层1=亮度（fn 层含 RGB 控制）
- * 组合键进 bootloader/reset（参考 murphpad）
+ * 三层切换：层0=音量 / 层1=亮度 / 层2=RGB
+ * 层0 触摸：上一首 / 播放暂停 / 下一首
+ * 层1 触摸：亮度减 / 无 / 亮度加
+ * 层2 触摸：RGB上一个效果 / RGB开关 / RGB下一个效果
+ * 组合键进 bootloader/reset
  */
 #include <behaviors.dtsi>
 #include <dt-bindings/zmk/keys.h>
@@ -28,15 +29,27 @@
 };
 
 / {
+    behaviors {
+        // 编码器在 RGB 层控制灯条亮度：递增=RGB_BRI 递减=RGB_BRD
+        // 用非 var 版 sensor-rotate（#sensor-binding-cells=0），RGB 命令内联进 bindings。
+        // inc_dec_kp 只能发按键码，无法驱动 rgb_ug；rgb_ug 每次需 2 cells（cmd+arg），
+        // 而 var 版 #sensor-binding-cells 写死 const 2 装不下两次调用，故用非 var 版。
+        inc_dec_rgb: inc_dec_rgb {
+            compatible = "zmk,behavior-sensor-rotate";
+            #sensor-binding-cells = <0>;
+            bindings = <&rgb_ug RGB_BRI>, <&rgb_ug RGB_BRD>;
+        };
+    };
+
     combos {
         compatible = "zmk,combos";
-        // NumLock(0) + -(3) → bootloader
+        // NumLock(0) + -(3) -> bootloader
         combo_bootloader {
             timeout-ms = <TIMEOUT>;
             key-positions = <0 3>;
             bindings = <&bootloader>;
         };
-        // NumLock(0) + *(2) → 系统重启
+        // NumLock(0) + *(2) -> 系统重启
         combo_reset {
             timeout-ms = <TIMEOUT>;
             key-positions = <0 2>;
@@ -47,36 +60,46 @@
     keymap: keymap {
         compatible = "zmk,keymap";
 
-        // 默认层：编码器 = 音量 ±，按压 = 切到亮度层
+        // 层0：音量层，编码器按压 -> 切到亮度层
         default_layer {
-            display-name = "Numpad";
+            display-name = "Volume";
             bindings = <
 &kp KP_NUM     &kp KP_DIVIDE   &kp KP_MULTIPLY   &kp KP_MINUS
 &kp KP_N7      &kp KP_N8       &kp KP_N9         &none
 &kp KP_N4      &kp KP_N5       &kp KP_N6         &kp KP_PLUS
 &kp KP_N1      &kp KP_N2       &kp KP_N3         &none
 &to 1          &kp KP_N0       &kp KP_DOT        &kp KP_ENTER
-&kp C_MUTE     &none           &none             &none
-&kp C_PREV     &none           &none             &none
-&kp C_NEXT     &none           &none             &none
+&kp C_PREV     &kp C_PLAY      &kp C_NEXT        &none
             >;
             sensor-bindings = <&inc_dec_kp C_VOL_UP C_VOL_DN>;
         };
 
-        // 亮度层：编码器 = 亮度 ±，按压 = 切回音量层；数字区 = RGB 控制
+        // 层1：亮度层，编码器按压 -> 切到 RGB 层
         fn_layer {
             display-name = "Bright";
             bindings = <
-&rgb_ug RGB_TOG &rgb_ug RGB_BRI &rgb_ug RGB_BRD &rgb_ug RGB_EFF
-&trans         &trans          &trans            &none
-&trans         &trans          &trans            &trans
-&trans         &trans          &trans            &none
-&to 0          &trans          &trans            &trans
-&kp C_MUTE     &none           &none             &none
-&kp C_PREV     &none           &none             &none
-&kp C_NEXT     &none           &none             &none
+&kp KP_NUM     &kp KP_DIVIDE   &kp KP_MULTIPLY   &kp KP_MINUS
+&kp KP_N7      &kp KP_N8       &kp KP_N9         &none
+&kp KP_N4      &kp KP_N5       &kp KP_N6         &kp KP_PLUS
+&kp KP_N1      &kp KP_N2       &kp KP_N3         &none
+&to 2          &kp KP_N0       &kp KP_DOT        &kp KP_ENTER
+&kp C_BRI_DN   &none           &kp C_BRI_UP      &none
             >;
             sensor-bindings = <&inc_dec_kp C_BRI_UP C_BRI_DN>;
+        };
+
+        // 层2：RGB 层，编码器按压 -> 切回音量层
+        rgb_layer {
+            display-name = "RGB";
+            bindings = <
+&kp KP_NUM     &kp KP_DIVIDE   &kp KP_MULTIPLY   &kp KP_MINUS
+&kp KP_N7      &kp KP_N8       &kp KP_N9         &none
+&kp KP_N4      &kp KP_N5       &kp KP_N6         &kp KP_PLUS
+&kp KP_N1      &kp KP_N2       &kp KP_N3         &none
+&to 0          &kp KP_N0       &kp KP_DOT        &kp KP_ENTER
+&rgb_ug RGB_EFF &rgb_ug RGB_TOG &rgb_ug RGB_EFR  &none
+            >;
+            sensor-bindings = <&inc_dec_rgb>;
         };
     };
 };

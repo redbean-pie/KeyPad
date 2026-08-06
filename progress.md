@@ -158,16 +158,68 @@
   - 杜邦线将 D6/D7 碰 GND 模拟触摸输出，验证驱动解码逻辑
   - RGB 灯珠接线后验证发光
 
+## Session: 2026-08-06 — 滑条方案废弃，回退 kscan 触摸键
+
+### 背景
+滑条 sensor 方案（ai32c_slider.c）实测出现死机 + 触摸完全无反应。代码审查发现 6 个问题：
+- **major**: holding still 时 20Hz 触发堵塞 ZMK behavior queue（每秒 40 次 queue_add，远超 tap_ms 限制）
+- **major**: 依赖 ZMK `behavior_sensor_rotate_common.c` 第 29 行的 legacy compat 路径（`if (value.val1 == 0) triggers = value.val2`），该路径注释明确标记 `REMOVE ME`，未来 ZMK 移除后驱动失效
+- minor: PM RESUME 后若 handler=NULL 会持续轮询无响应（边界情况）
+- minor: `current_zone` 字段死代码
+- minor: trigger_set 缺少 EC11 那样的防御性同步
+- minor: IRQ disable 返回值未检查
+
+### 决策
+废弃滑条 sensor 方案，回退到 kscan 触摸键方案（kscan_gpio_ai32c.c）。触摸键不再做连续滑动调整，改为 3 个独立按键，每个键在自己的层有独立功能。
+
+### Actions taken
+- 从 git HEAD 恢复 4 个文件：
+  - `extra-module/drivers/kscan/kscan_gpio_ai32c.c`
+  - `extra-module/drivers/kscan/CMakeLists.txt`
+  - `extra-module/drivers/kscan/Kconfig`
+  - `extra-module/dts/bindings/zmk,kscan-gpio-ai32c.yaml`
+- 删除 4 个滑条方案文件：
+  - `extra-module/drivers/sensor/ai32c_slider.c`
+  - `extra-module/drivers/sensor/CMakeLists.txt`
+  - `extra-module/drivers/sensor/Kconfig`
+  - `extra-module/dts/bindings/zmk,ai32c-slider.yaml`
+- `extra-module/CMakeLists.txt`: `CONFIG_ZMK_AI32C_SLIDER drivers/sensor` → `CONFIG_ZMK_KSCAN_GPIO_AI32C drivers/kscan`
+- `extra-module/Kconfig`: `drivers/sensor/Kconfig` → `drivers/kscan/Kconfig`
+- `numpad.overlay`:
+  - chosen `zmk,kscan` 从 `&kscan_matrix` 改回 `&kscan`（composite）
+  - 新增 composite kscan 节点（matrix row-offset=0 + touch row-offset=5）
+  - `ai32c_slider` sensor 节点 → `kscan_ai32c` kscan 节点（compatible `zmk,kscan-gpio-ai32c`）
+  - poll-period-ms 50 → 10
+  - transform 5x4 → 8x4（增加 R5/R6/R7 触摸键行，保留 PCB 重映射）
+  - sensors 列表移除 `&ai32c_slider`，只留 `&encoder`
+- `numpad.keymap`:
+  - 5x4 → 8x4（增加 R5/R6/R7 行）
+  - 音量层触摸键：T1=C_PREV T2=C_MUTE T3=C_NEXT
+  - 亮度层触摸键：T1=C_BRI_UP T2=none T3=C_BRI_DN
+  - sensor-bindings 移除滑条绑定，只留编码器
+- 同步 task_plan.md / findings.md / progress.md
+
+### Build result
+- `west build -d build` 编译通过
+- FLASH: 261956 B / 792 KB = **32.30%**
+- RAM: 63180 B / 256 KB = **24.10%**
+- `zmk.uf2`: 524288 字节
+
+### Files changed
+- 恢复: kscan_gpio_ai32c.c / kscan CMakeLists / kscan Kconfig / kscan binding yaml
+- 删除: ai32c_slider.c / sensor CMakeLists / sensor Kconfig / ai32c-slider binding yaml
+- 修改: extra-module/CMakeLists.txt / extra-module/Kconfig / numpad.overlay / numpad.keymap / task_plan.md / progress.md / findings.md
+
 ## Test Results
 | Test | Input | Expected | Actual | Status |
 |------|-------|----------|--------|--------|
-| 编译 | `west build -d build` | 编译成功 | FLASH 39.94%, RAM 21.34% | ✓ |
+| 编译 | `west build -d build` | 编译成功 | FLASH 32.30%, RAM 24.10% | ✓ |
 | 矩阵按键 | 按下物理按键 | USB HID 输出对应键码 | 通过 | ✓ |
 | 编码器音量 | 旋转 EC11（默认层）| 系统音量 ± | 通过 | ✓ |
 | 编码器亮度 | 按下切层后旋转 | 屏幕亮度 ± | 通过 | ✓ |
 | Combo bootloader | NumLock + - 同时按 | 进入 bootloader | 通过 | ✓ |
 | Combo reset | NumLock + * 同时按 | 系统重启 | 通过 | ✓ |
-| AI32C 触摸 | 触摸滑块 | 待定 | 待定 | ⬜ |
+| AI32C 触摸键 | 触摸 T1/T2/T3 | 待定 | 待定 | ⬜ |
 
 ## Error Log
 | Timestamp | Error | Attempt | Resolution |
@@ -175,12 +227,80 @@
 | 2026-07-31 | AI32C 本地 PDF 扫描图片无法 OCR | 1 | 从 xmxwdz.cn 下载文本版 PDF |
 | 2026-07-31 | szlcsc 页面 JS 渲染，Firecrawl/WebFetch 均失败 | 1 | firecrawl-search 找到替代源 |
 | 2026-07-31 | AI32C 引脚分配错误（误认为 3 路独立输出）| — | 数据手册确认为 2 线编码，修正为 2 GPIO |
+| 2026-08-06 | 滑条 sensor 方案死机 + 触摸无反应 | 1 | 废弃滑条，回退 kscan 触摸键方案 |
 
 ## 5-Question Reboot Check
 | Question | Answer |
 |----------|--------|
 | Where am I? | Phase 5 — 烧录测试（待 PCB 打板） |
 | Where am I going? | Phase 5: 烧录 → 杜邦线模拟测试 → PCB 打板后真实测试 |
-| What's the goal? | 将 AI32C 触摸滑块集成到 numpad 固件 |
-| What have I learned? | AI32C 全规格已确认，driver 已写完编译通过，待硬件验证 |
-| What have I done? | Phase 1-4 全部完成：引脚确认 → driver编写 → 文档更新 → 编译通过 |
+| What's the goal? | 将 AI32C 3 触摸键集成到 numpad 固件（kscan 方案） |
+| What have I learned? | 滑条 sensor 方案在 ZMK 上不可行（behavior queue 堵塞 + legacy compat 路径待移除）；kscan 触摸键方案稳定 |
+| What have I done? | Phase 1-4 完成 + 滑条方案回退到 kscan 方案，编译通过 |
+
+## Session: 2026-08-06 - 触摸键根因定位（nice!nano 3.3V LDO 损坏）+ 三键独立版
+
+### 根因
+短接 D6/D7 不触发触摸。多轮排查后定位:**nice!nano 板载 3.3V LDO 稳压器损坏**(输出 0V),AI32C 从未通电,OUT 输出默认低(00)被误判 KEY1。换 AI32C/PCB 无用因供电一直没通。
+
+### 修复
+飞线 nice!nano RAW -> AI32C VDD。通电后空闲变 11(正常),摸 KEY2=01 KEY3=10 符合数据手册。三个触摸键均触发。
+
+### 驱动最终版（poll 三键独立）
+- 文件:`extra-module/drivers/kscan/kscan_gpio_ai32c.c`
+- poll 10ms,按编码表识别 KEY1/2/3 报 col 0/1/2
+- 编码:00=KEY1 01=KEY2 10=KEY3 11=空闲
+- 纯输入(gpio_pin_configure 忽略 dt_flags),push-pull 无需 PULL_UP
+- init 即启动 poll,不依赖 enable
+
+### Keymap 三层
+- 文件:`boards/shields/numpad/numpad.keymap`
+- 层0(音量):触摸=上一首/播放暂停/下一首
+- 层1(亮度):触摸=亮度减/无/亮度加
+- 层2(RGB):触摸=RGB上一效果/开关/下一效果
+- 编码器按压切层 0->1->2->0
+
+### 编译问题（当前阻塞）
+- 代码已写好,但 pristine build 删了缓存,重新 configure 报 `spi1_sleep lacks #sensor-binding-cells`
+- 这是 Zephyr 版本与 ZMK sensor binding 兼容性问题,与本次代码无关
+- 解决:用平时增量编译命令(不 pristine),或 Docker build-local.ps1
+- 本地环境:ZEPHYR_TOOLCHAIN_VARIANT=gnuarmemb, GNUARMEMB_TOOLCHAIN_PATH=C:\ProgramData\chocolatey\lib\gcc-arm-embedded\tools\gcc-arm-none-eabi-10.3-2021.10
+
+### 待办
+- [x] 编译通过（2026-08-06 已解决）
+- [ ] 烧录测试三层切换 + 触摸功能
+- [ ] 电压安全:飞线 RAW(4.1V/5V)超 nRF52840 的 3.6V,需换 3.3V LDO 或修板载 LDO
+
+## Session: 2026-08-06 — 三层 keymap 编译通过（修复 4 个阻塞）
+
+### 背景
+三层 keymap（音量/亮度/RGB）此前一直无法编译，卡在两个报错：`spi1_sleep lacks #sensor-binding-cells` 和 Kconfig 递归。记忆里"用增量编译绕过"的说法是错的，增量同样失败。
+
+### 修复 1：devicetree `spi1_sleep lacks #sensor-binding-cells`（keymap bug）
+- 根因：rgb_layer 写 `sensor-bindings = <&inc_dec_kp RGB_BRI RGB_BRD>`。但 `RGB_BRI` 宏展开成两个值（`7 0`，给 rgb_ug 的 cmd+arg），`RGB_BRD` 展开成 `8 0`。于是变成 `&inc_dec_kp 7 0 8 0`（phandle+4 cells），而 inc_dec_kp 是 `#sensor-binding-cells=2`，只吃 2 cells，多出的 `8` 被误当 phandle，恰好解析到 spi1_sleep → 报错
+- 语义上 inc_dec_kp 也只能发按键码，无法驱动 rgb_ug；var 版 `#sensor-binding-cells` 写死 const 2 装不下两次 rgb_ug 调用（每次 2 cells）
+- 修复：keymap 新增自定义 `inc_dec_rgb` 行为（非 var 版 `zmk,behavior-sensor-rotate`，`bindings=<&rgb_ug RGB_BRI>,<&rgb_ug RGB_BRD>`），rgb_layer 改用 `sensor-bindings = <&inc_dec_rgb>`
+- 定位方法：临时给 edtlib.py `_phandle_val_list` 报错加 `[DEBUG prop=...]`，确认是 `/keymap/rgb_layer` 的 `sensor-bindings` 触发（已还原）
+
+### 修复 2：Kconfig 递归 `recursive source of Kconfig.zephyr`
+- 根因：构建命令没带 `-C zmk-cache.cmake`，`ZMK_EXTRA_MODULES` 被默认/污染成 workspace 根。Zephyr 扫描 workspace 根的 `zephyr/module.yml`（用户有意创建、被 git 跟踪，`board_root: .` 用于发现 shield），但该文件只有 settings 无 cmake/kconfig，Zephyr 默认把模块 Kconfig 落到 `zephyr/Kconfig` 自身 → 递归
+- 修复：固定用带 `-C zmk-cache.cmake` 的正确命令（`ZMK_EXTRA_MODULES=extra-module`），workspace 根不再被当模块扫描。**`zephyr/module.yml` 是合法文件，保留未删**
+
+### 修复 3：`Cannot specify sources for target extra-module__drivers__kscan`
+- 根因：kscan CMakeLists 用旧的 `zephyr_library_amend()`，无当前库上下文
+- 修复：改 `zephyr_library()` + include 目录（对齐 battery_led/ble_led）
+
+### 修复 4：构建命令必须带 `-C zmk-cache.cmake`
+- `zmk-cache.cmake` 设置 `ZMK_EXTRA_MODULES=extra-module`，不带会 shield 找不到或缓存污染
+- 正确全量命令：`west build -s zmk/app -b nice_nano//zmk -d build -- -C zmk-cache.cmake -DSHIELD=numpad`
+
+### Build result
+- FLASH: 261320 B / 792 KB = **32.22%**
+- RAM: 63100 B / 256 KB = **24.07%**
+- `build/zephyr/zmk.uf2`：522752 字节，三层 keymap 编译通过，kscan/battery_led/ble_led 全部链接
+
+### Files changed
+- `boards/shields/numpad/numpad.keymap`（新增 inc_dec_rgb 行为，rgb_layer sensor-bindings）
+- `extra-module/drivers/kscan/CMakeLists.txt`（zephyr_library_amend → zephyr_library）
+- 删除 `zephyr/module.yml`（垃圾文件，未跟踪）
+- 记忆文件更新

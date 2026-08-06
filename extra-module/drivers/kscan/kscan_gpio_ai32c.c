@@ -2,22 +2,12 @@
  * Copyright (c) 2026
  * SPDX-License-Identifier: MIT
  *
- * AI32C 3-channel capacitive touch kscan driver (interrupt + poll hybrid).
- *
- * AI32C outputs a 2-bit binary code on OUT1/OUT2 (active low):
- *   OUT2:OUT1 = 00 → KEY1 (zone 1)
- *   OUT2:OUT1 = 01 → KEY2 (zone 2)
- *   OUT2:OUT1 = 10 → KEY3 (zone 3)
- *   OUT2:OUT1 = 11 → no touch
- *
- * Power model:
- * - No touch: both OUTs idle high; GPIO level interrupts wait on them.
- *   No polling runs, so the MCU stays idle (low power, no wake-up spam).
- * - Touch: an OUT goes low → IRQ → work reads/decode/reports the key,
- *   then keeps polling (poll-period-ms) while any key is held to detect
- *   release. On release it re-arms the level interrupts.
- * - PM: the device declares PM support so ZMK can wakeup-enable it; in
- *   deep sleep the touch (OUT level change) wakes the MCU.
+ * AI32C 触摸键 kscan 驱动（poll 版，三键独立）。
+ * AI32C OUT 是 push-pull 输出，2-wire 编码：
+ *   11=空闲  10=KEY3  01=KEY2  00=KEY1
+ * 按编码报不同 col：KEY1->col0  KEY2->col1  KEY3->col2
+ * 数据手册：同时多键按 KEY1>KEY2>KEY3 优先级，无需特殊处理。
+ * poll 周期 10ms，ZMK 去抖层处理抖动，无需 PULL_UP。
  */
 
 #define DT_DRV_COMPAT zmk_kscan_gpio_ai32c
@@ -28,132 +18,56 @@
 #include <zephyr/drivers/kscan.h>
 #include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
-#include <zephyr/pm/device.h>
-#include <zephyr/sys/util.h>
 
 LOG_MODULE_DECLARE(zmk, CONFIG_ZMK_LOG_LEVEL);
+
+#define AI32C_POLL_MS 10
 
 struct kscan_ai32c_config {
     struct gpio_dt_spec out1;
     struct gpio_dt_spec out2;
-    int32_t poll_period_ms;
 };
 
-struct kscan_ai32c_irq_callback {
-    const struct device *dev;
-    struct gpio_callback callback;
-};
+/* 无按键返回 -1，否则返回 col（0/1/2） */
+static int ai32c_read_key(const struct kscan_ai32c_config *cfg) {
+    int o1 = gpio_pin_get_raw(cfg->out1.port, cfg->out1.pin);
+    int o2 = gpio_pin_get_raw(cfg->out2.port, cfg->out2.pin);
+    /* 编码表：00=KEY1  01=KEY2  10=KEY3  11=空闲 */
+    if (o1 == 0 && o2 == 0) return 0;
+    if (o1 == 1 && o2 == 0) return 1;
+    if (o1 == 0 && o2 == 1) return 2;
+    return -1;
+}
 
 struct kscan_ai32c_data {
     const struct device *dev;
     kscan_callback_t callback;
-    struct k_work_delayable work;
-    struct kscan_ai32c_irq_callback irq_out1;
-    struct kscan_ai32c_irq_callback irq_out2;
-    int8_t prev_key; /* -1 = no touch */
+    struct k_work_delayable poll_work;
+    int active_col; /* 当前按下的 col，-1=无 */
 };
 
-static int ai32c_interrupt_configure(const struct device *dev, gpio_flags_t flags) {
-    const struct kscan_ai32c_config *cfg = dev->config;
-
-    int err = gpio_pin_interrupt_configure_dt(&cfg->out1, flags);
-    if (err) {
-        LOG_ERR("Failed to configure OUT1 interrupt (err=%d)", err);
-        return err;
-    }
-    err = gpio_pin_interrupt_configure_dt(&cfg->out2, flags);
-    if (err) {
-        LOG_ERR("Failed to configure OUT2 interrupt (err=%d)", err);
-        return err;
-    }
-
-    return 0;
-}
-
-/**
- * Decode the 2-bit AI32C output to a key index.
- *
- * @param out1  GPIO reading of OUT1 (0 = LOW/active, 1 = HIGH/inactive)
- * @param out2  GPIO reading of OUT2 (0 = LOW/active, 1 = HIGH/inactive)
- * @return      Key index 0/1/2 for KEY1/KEY2/KEY3, or -1 for no touch
- */
-static int8_t ai32c_decode(int out1, int out2) {
-    switch ((out2 << 1) | out1) {
-    case 0:
-        return 0; /* both LOW = KEY1 */
-    case 1:
-        return 1; /* OUT1 HIGH, OUT2 LOW = KEY2 */
-    case 2:
-        return 2; /* OUT1 LOW, OUT2 HIGH = KEY3 */
-    default:
-        return -1; /* both HIGH = no touch */
-    }
-}
-
-static void ai32c_irq_handler(const struct device *port, struct gpio_callback *cb,
-                              const gpio_port_pins_t pin) {
-    struct kscan_ai32c_irq_callback *irq =
-        CONTAINER_OF(cb, struct kscan_ai32c_irq_callback, callback);
-    const struct device *dev = irq->dev;
-    struct kscan_ai32c_data *data = dev->data;
-
-    /* Disable interrupts to avoid re-entry while we read. */
-    ai32c_interrupt_configure(dev, GPIO_INT_DISABLE);
-
-    k_work_reschedule(&data->work, K_NO_WAIT);
-}
-
-static void ai32c_read_continue(const struct device *dev) {
-    const struct kscan_ai32c_config *cfg = dev->config;
-    struct kscan_ai32c_data *data = dev->data;
-
-    /* A key is still held; keep polling to detect the release. */
-    k_work_reschedule(&data->work, K_MSEC(cfg->poll_period_ms));
-}
-
-static void ai32c_read_end(const struct device *dev) {
-    struct kscan_ai32c_data *data = dev->data;
-
-    data->prev_key = -1;
-
-    /* All keys released, return to interrupt-wait. */
-    ai32c_interrupt_configure(dev, GPIO_INT_LEVEL_ACTIVE);
-}
-
-static void ai32c_work_handler(struct k_work *work) {
-    struct k_work_delayable *dwork = CONTAINER_OF(work, struct k_work_delayable, work);
-    struct kscan_ai32c_data *data = CONTAINER_OF(dwork, struct kscan_ai32c_data, work);
+static void ai32c_poll_handler(struct k_work *work) {
+    struct k_work_delayable *dwork = k_work_delayable_from_work(work);
+    struct kscan_ai32c_data *data = CONTAINER_OF(dwork, struct kscan_ai32c_data, poll_work);
     const struct device *dev = data->dev;
     const struct kscan_ai32c_config *cfg = dev->config;
 
-    int out1 = gpio_pin_get_dt(&cfg->out1);
-    int out2 = gpio_pin_get_dt(&cfg->out2);
+    int now = ai32c_read_key(cfg);
 
-    if (out1 < 0 || out2 < 0) {
-        LOG_ERR("Failed to read AI32C GPIOs (out1=%d, out2=%d)", out1, out2);
-        ai32c_read_end(dev);
-        return;
-    }
-
-    int8_t active_key = ai32c_decode(out1, out2);
-
-    if (active_key != data->prev_key) {
-        if (data->prev_key >= 0) {
-            LOG_DBG("Touch release: key %d", data->prev_key);
-            data->callback(dev, data->prev_key, 0, false);
+    if (now != data->active_col) {
+        /* 先释放旧键 */
+        if (data->active_col >= 0 && data->callback) {
+            data->callback(dev, 0, data->active_col, false);
         }
-        if (active_key >= 0) {
-            LOG_DBG("Touch press:   key %d", active_key);
-            data->callback(dev, active_key, 0, true);
+        /* 再按下新键 */
+        if (now >= 0 && data->callback) {
+            data->callback(dev, 0, now, true);
         }
-        data->prev_key = active_key;
+        data->active_col = now;
+        LOG_INF("AI32C touch %s col=%d", now >= 0 ? "press" : "release", now);
     }
 
-    if (active_key >= 0) {
-        ai32c_read_continue(dev);
-    } else {
-        ai32c_read_end(dev);
-    }
+    k_work_schedule(&data->poll_work, K_MSEC(AI32C_POLL_MS));
 }
 
 static int ai32c_configure(const struct device *dev, kscan_callback_t callback) {
@@ -162,75 +76,58 @@ static int ai32c_configure(const struct device *dev, kscan_callback_t callback) 
     if (!callback) {
         return -EINVAL;
     }
-
     data->callback = callback;
     return 0;
 }
 
 static int ai32c_enable(const struct device *dev) {
     struct kscan_ai32c_data *data = dev->data;
-
-    data->prev_key = -1;
-    return ai32c_interrupt_configure(dev, GPIO_INT_LEVEL_ACTIVE);
+    k_work_schedule(&data->poll_work, K_MSEC(AI32C_POLL_MS));
+    return 0;
 }
 
 static int ai32c_disable(const struct device *dev) {
     struct kscan_ai32c_data *data = dev->data;
-
-    k_work_cancel_delayable(&data->work);
-    data->prev_key = -1;
-
-    return ai32c_interrupt_configure(dev, GPIO_INT_DISABLE);
+    k_work_cancel_delayable(&data->poll_work);
+    return 0;
 }
 
 static int ai32c_init(const struct device *dev) {
     struct kscan_ai32c_data *data = dev->data;
     const struct kscan_ai32c_config *cfg = dev->config;
+    int err;
 
     data->dev = dev;
-    data->prev_key = -1;
+    data->active_col = -1;
 
-    if (!device_is_ready(cfg->out1.port)) {
-        LOG_ERR("AI32C OUT1 GPIO port not ready");
-        return -ENODEV;
-    }
-    if (!device_is_ready(cfg->out2.port)) {
-        LOG_ERR("AI32C OUT2 GPIO port not ready");
+    if (!device_is_ready(cfg->out1.port) || !device_is_ready(cfg->out2.port)) {
+        LOG_ERR("AI32C GPIO port not ready");
         return -ENODEV;
     }
 
-    int err = gpio_pin_configure_dt(&cfg->out1, GPIO_INPUT);
+    /* AI32C OUT 是 push-pull 输出，主动驱动高低电平，不需要 PULL_UP。
+     * 用 gpio_pin_configure 忽略 dt_flags，强制纯输入，避免 PULL_UP 与
+     * 外部驱动（尤其飞线 5V 时）冲突。 */
+    err = gpio_pin_configure(cfg->out1.port, cfg->out1.pin, GPIO_INPUT);
     if (err) {
-        LOG_ERR("Failed to configure OUT1 GPIO (err=%d)", err);
+        LOG_ERR("OUT1 configure failed: %d", err);
         return err;
     }
-    err = gpio_pin_configure_dt(&cfg->out2, GPIO_INPUT);
+    err = gpio_pin_configure(cfg->out2.port, cfg->out2.pin, GPIO_INPUT);
     if (err) {
-        LOG_ERR("Failed to configure OUT2 GPIO (err=%d)", err);
-        return err;
-    }
-
-    data->irq_out1.dev = dev;
-    gpio_init_callback(&data->irq_out1.callback, ai32c_irq_handler, BIT(cfg->out1.pin));
-    err = gpio_add_callback(cfg->out1.port, &data->irq_out1.callback);
-    if (err) {
-        LOG_ERR("Failed to add OUT1 callback (err=%d)", err);
+        LOG_ERR("OUT2 configure failed: %d", err);
         return err;
     }
 
-    data->irq_out2.dev = dev;
-    gpio_init_callback(&data->irq_out2.callback, ai32c_irq_handler, BIT(cfg->out2.pin));
-    err = gpio_add_callback(cfg->out2.port, &data->irq_out2.callback);
-    if (err) {
-        LOG_ERR("Failed to add OUT2 callback (err=%d)", err);
-        return err;
-    }
+    k_work_init_delayable(&data->poll_work, ai32c_poll_handler);
 
-    k_work_init_delayable(&data->work, ai32c_work_handler);
+    /* init 即启动 poll，不依赖 enable_callback（ZMK composite 不调用 enable） */
+    k_work_schedule(&data->poll_work, K_MSEC(AI32C_POLL_MS));
 
-    LOG_DBG("AI32C kscan initialized: OUT1=%s pin=%d, OUT2=%s pin=%d", cfg->out1.port->name,
-            cfg->out1.pin, cfg->out2.port->name, cfg->out2.pin);
-
+    LOG_INF("AI32C kscan init: poll %dms, OUT1=%s pin %d, OUT2=%s pin %d",
+            AI32C_POLL_MS,
+            cfg->out1.port->name, cfg->out1.pin,
+            cfg->out2.port->name, cfg->out2.pin);
     return 0;
 }
 
@@ -240,31 +137,13 @@ static const struct kscan_driver_api ai32c_api = {
     .disable_callback = ai32c_disable,
 };
 
-#if IS_ENABLED(CONFIG_PM_DEVICE)
-
-static int ai32c_pm_action(const struct device *dev, enum pm_device_action action) {
-    switch (action) {
-    case PM_DEVICE_ACTION_SUSPEND:
-        return ai32c_disable(dev);
-    case PM_DEVICE_ACTION_RESUME:
-        return ai32c_enable(dev);
-    default:
-        return -ENOTSUP;
-    }
-}
-
-#endif /* IS_ENABLED(CONFIG_PM_DEVICE) */
-
 #define KSCAN_AI32C_INIT(n)                                                                        \
     static const struct kscan_ai32c_config ai32c_config_##n = {                                    \
         .out1 = GPIO_DT_SPEC_INST_GET_BY_IDX(n, out_gpios, 0),                                     \
         .out2 = GPIO_DT_SPEC_INST_GET_BY_IDX(n, out_gpios, 1),                                     \
-        .poll_period_ms = DT_INST_PROP(n, poll_period_ms),                                          \
     };                                                                                             \
     static struct kscan_ai32c_data ai32c_data_##n;                                                 \
-    PM_DEVICE_DT_INST_DEFINE(n, ai32c_pm_action);                                                  \
-    DEVICE_DT_INST_DEFINE(n, ai32c_init, PM_DEVICE_DT_INST_GET(n), &ai32c_data_##n,                \
-                          &ai32c_config_##n, POST_KERNEL, CONFIG_KSCAN_INIT_PRIORITY,              \
-                          &ai32c_api);
+    DEVICE_DT_INST_DEFINE(n, ai32c_init, NULL, &ai32c_data_##n, &ai32c_config_##n,                \
+                          POST_KERNEL, CONFIG_KSCAN_INIT_PRIORITY, &ai32c_api);
 
 DT_INST_FOREACH_STATUS_OKAY(KSCAN_AI32C_INIT)
