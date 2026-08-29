@@ -384,3 +384,10 @@ LDO 没坏，是 **CE 脚没被拉高**导致 LDO 关闭。CE 由 P0.13 控制�
 - [ ] 开机 500ms 内不误触
 - [ ] 拔 USB 后 fn 层电量显示不再被清屏打断
 - [ ] 深睡眠后电量灯/蓝牙灯确认为熄灭
+
+## Session: 2026-08-29 — 收尾（git 推送 + gitignore）
+
+- 提交 `6a5b251`（13 文件，+303/-51）已推送到 github.com:redbean-pie/KeyPad.git
+- .gitignore 新增：`.firecrawl/`（Firecrawl 抓取的硬件资料缓存，纯调研用，
+  结论已沉淀 docs/ 和 findings.md）、docs 下三个未定稿草稿
+- **当前项目状态**：代码全部完成且已推送；等待换新 nice!nano 开发板后上机验证
