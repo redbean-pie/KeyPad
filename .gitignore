@@ -17,6 +17,14 @@ build/
 /nicenano_NRF52840资料/
 /optional/
 
+# Firecrawl 抓取的硬件资料缓存（调研用，结论已沉淀到 docs/ 和 findings.md）
+.firecrawl/
+
+# 未定稿的文档草稿
+docs/KEYMAP_TEST.md
+docs/TOUCH_SLIDER_PLAN.md
+docs/程序*/
+
 # IDE / 工具工作目录
 .trae/
 .vscode/
