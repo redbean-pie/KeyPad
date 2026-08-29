@@ -129,13 +129,13 @@ AI32C 是 AI32 的低功耗增强版，引脚兼容。
 - **不需要 PULL_UP**：驱动改为纯输入（gpio_pin_configure 忽略 dt_flags）
 - 飞线 5V 供电时，PULL_UP 拉到 3.3V 会与 5V 输出冲突，必须去掉 PULL_UP
 
-### nice!nano 3.3V LDO 损坏（触摸无反应根因）
+### nice!nano 3.3V VCC 关闭（触摸无反应根因，2026-08-08 纠正）
 - **现象**：AI32C VDD=0V，OUT 输出默认低(00)被误判 KEY1 持续触摸
 - **排查**：init 时 PULL_UP 拉高 raw=1（证明引脚没短路），但运行后 poll 读到 00；高阻模式仍 00 -> AI32C 自己输出
-- **根因**：nice!nano 板载 3.3V LDO 稳压器损坏（输出 0V），AI32C 从未通电
-- **验证**：万用表测 VCC 引脚=0V，VCC 对 GND 高阻（无短路），AI32C pin7/8 高阻（无击穿）
-- **修复**：飞线 nice!nano RAW（4.1V 电池/5V USB）-> AI32C VDD，通电后空闲变 11，触摸恢复
-- **待办**：RAW 电压超 nRF52840 3.6V 上限，需换 3.3V LDO（AMS1117-3.3）或修板载 LDO
+- **根因（纠正）**：**不是 LDO 损坏**。万用表实测 LDO（ME6211C33M5G-N，用户已换全新）三脚：IN=4.86V（正常），**CE=0V（异常）**，OUT=0V。CE=0V 关闭 LDO，OUT 才为 0V。CE 由 P0.13 控制（原理图标注 P0.13-POWER-EN，下拉 R2=100K），开发板手册明确"P0.13 设低关闭 3.3V VCC"
+- **验证**：VCC 对 GND 高阻（无短路），AI32C pin7/8 高阻（无击穿）→ 排除短路，确认是 CE 控制问题
+- **临时修复**：飞线 nice!nano RAW（4.1V 电池/5V USB）-> AI32C VDD，通电后空闲变 11，触摸恢复
+- **代码层尝试（失败）**：见下方 EXT_POWER 段
 
 ### GPIOTE 中断不触发（已用 poll 绕过）
 - EDGE_BOTH 中断配置成功（err=0），但短接/触摸不触发 IRQ
@@ -174,3 +174,27 @@ AI32C 是 AI32 的低功耗增强版，引脚兼容。
 ### 4. 正确构建命令必须带 `-C zmk-cache.cmake`
 - 全量：`west build -s zmk/app -b nice_nano//zmk -d build -- -C zmk-cache.cmake -DSHIELD=numpad`
 - 增量 `west build -d build` 只在缓存未污染时可用
+
+## 2026-08-08 补充发现：P0.13 / NFCT / EXT_POWER 尝试（失败）
+
+### P0.13 是 nRF52840 NFC 引脚
+- nRF52840 的 P0.09/P0.10 默认是 NFC 天线引脚（NFCT），不是普通 GPIO
+- **注意**：实际控制 LDO CE 的是 P0.13（原理图 P0.13-POWER-EN），P0.13 本身不是 NFCT 引脚（NFCT 是 P0.09/P0.10）。但 nice!nano 设计中 P0.13 控制 EXT-VCC
+- 开发板手册原文："当 P0.13 设置为低时，将关闭 3.3V、VCC 引脚的电源。这对于减少空闲时使用功率的组件（如 RGB、LED）非常有用"
+
+### EXT_POWER 尝试（失败）
+1. `numpad.overlay` 加 `EXT_POWER` 节点：`compatible = "zmk,ext-power-generic"; control-gpios = <&gpio0 13 GPIO_ACTIVE_HIGH>`
+2. `numpad.conf` 加 `CONFIG_ZMK_EXT_POWER=y`（确认生成 `CONFIG_ZMK_EXT_POWER=1`、`CONFIG_DT_HAS_ZMK_EXT_POWER_GENERIC_ENABLED=1`）
+3. ZMK ext-power 驱动 `zmk/app/src/ext_power_generic.c`：init 时 `ext_power_enable()` 调 `gpio_pin_set_dt(gpio, 1)` 拉高，优先级 81（POST_KERNEL）
+4. 启动日志**无 ext-power 相关输出**，CE 实测仍 0V
+5. 驱动 init 里手动 `gpio_pin_configure` + `gpio_pin_set` 拉高 P0.13，烧录后仍无效
+
+### 失败原因（推测，未最终定位）
+- ext-power 驱动 init 未打印日志，可能未真正执行到 enable
+- 或 P0.13 走线/硬件问题，固件拉高但物理不到 CE 脚
+- 代码层无法进一步定位，需硬件排查 P0.13 到 CE 的走线
+
+### 最终决策
+- `git restore` 回退 EXT_POWER 改动，工作区干净 = HEAD `3ec4de0`
+- 代码层不再尝试修复供电，交硬件层处理（排查 P0.13 走线 / 外接 AMS1117-3.3 绕过板载 LDO）
+- 固件可用状态：飞线 RAW 供电时三键触摸触发音量增加（已验证）

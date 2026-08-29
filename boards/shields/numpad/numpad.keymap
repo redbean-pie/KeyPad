@@ -24,10 +24,6 @@
 
 #define TIMEOUT 300
 
-&encoder {
-    status = "okay";
-};
-
 / {
     behaviors {
         // 编码器在 RGB 层控制灯条亮度：递增=RGB_BRI 递减=RGB_BRD

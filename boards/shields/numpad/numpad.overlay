@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: MIT
  *
  * 数字小键盘 shield（nice!nano v2 / Pro Micro 互连）
- * 5x4 矩阵(编码器按压复用 R4C0 空位) + EC11 旋钮 + AI32C 触摸键(单键)
+ * 5x4 矩阵 + EC11 旋钮 + AI32C 三触摸键（2-wire 编码）
  *
  * 引脚分配（按排针物理位置连续）：
  *   左列 D2-D9：C0=D2 C1=D3 C2=D4 C3=D5 | AI32C: OUT1=D6 OUT2=D7 | EC11: A=D8 B=D9
@@ -13,8 +13,9 @@
  *   蓝牙 LED: D21 (P0.31, GPIO 输出) - 蓝灯, 已连接常亮/未连接闪烁
  *   预留：D0/D1（串口）
  *
- * 编码器按压：复用矩阵 R4C0（0 行空位，行 D18 + 列 D2）
- * AI32C 触摸：单键 kscan，任一 OUT 拉低 = 触摸，composite 合并到 R5C0
+ * 编码器按压：复用矩阵 R2C3（+ 键 2U 位空置，PCB 走线至此）
+ * AI32C 触摸：2-bit 编码报 R5C0/C1/C2（KEY1/KEY2/KEY3），深睡眠
+ *   唤醒由驱动在 SLEEP 前挂 SENSE 中断实现（见 kscan_gpio_ai32c.c）
  */
 #include <dt-bindings/zmk/matrix_transform.h>
 #include <dt-bindings/led/led.h>
@@ -27,7 +28,7 @@
         zmk,underglow = &led_strip;
     };
 
-    /* Composite kscan: 5x4 matrix + AI32C 1 touch key (R5C0) */
+    /* Composite kscan: 5x4 matrix + AI32C 3 touch keys (R5C0-C2) */
     kscan: kscan {
         compatible = "zmk,kscan-composite";
 
@@ -44,7 +45,7 @@
         };
     };
 
-    /* 5x4 matrix kscan (R4C0 = encoder press) */
+    /* 5x4 matrix kscan */
     kscan_matrix: kscan_matrix {
         compatible = "zmk,kscan-gpio-matrix";
         wakeup-source;
@@ -64,16 +65,17 @@
             ;
     };
 
-    /* AI32C touch key (single-key → R5C0) */
+    /* AI32C 触摸键（三键，OUT 为 push-pull 输出，驱动内强制纯输入，
+     * 此处 flags 仅占位不生效）*/
     kscan_ai32c: kscan_ai32c {
         compatible = "zmk,kscan-gpio-ai32c";
         out-gpios
-            = <&pro_micro 6 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>
-            , <&pro_micro 7 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>
+            = <&pro_micro 6 GPIO_ACTIVE_HIGH>
+            , <&pro_micro 7 GPIO_ACTIVE_HIGH>
             ;
     };
 
-    /* Transform: 6 rows x 4 cols (R5C0 = AI32C 触摸键) */
+    /* Transform: 6 rows x 4 cols (R5 = AI32C 触摸键行) */
     /* PCB 2U 键轴位与设计文档不同：
        + 键(2U高)轴在 R1C3 非 R2C3；Enter 键(2U高)轴在 R3C3 非 R4C3
        0 键(2U宽)轴在 R4C0 非 R4C1；编码器按压接到 R2C3(+ 设计走线)
@@ -110,7 +112,6 @@ RC(5,0) RC(5,1) RC(5,2) RC(5,3)
         a-gpios = <&pro_micro 9 (GPIO_ACTIVE_HIGH | GPIO_PULL_UP)>;
         b-gpios = <&pro_micro 8 (GPIO_ACTIVE_HIGH | GPIO_PULL_UP)>;
         steps = <80>;
-        status = "disabled";
     };
 
     sensors: sensors {
@@ -126,10 +127,6 @@ RC(5,0) RC(5,1) RC(5,2) RC(5,3)
             gpios = <&pro_micro 21 GPIO_ACTIVE_HIGH>;
         };
     };
-};
-
-&encoder {
-    status = "okay";
 };
 
 /* USB 日志串口（CDC ACM，调试用） */

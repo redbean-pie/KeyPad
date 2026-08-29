@@ -4,8 +4,8 @@ name: Numpad
 type: shield
 url: ""
 requires: [pro_micro]
-description: "Numeric keypad with EC11 rotary encoder and 0.91 OLED, nice!nano v2 based"
+description: "Numeric keypad with EC11 rotary encoder, AI32C touch keys and WS2812 RGB, nice!nano v2 based"
 features:
   - keys
   - encoder
-  - display
+  - underglow

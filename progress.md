@@ -304,3 +304,83 @@
 - `extra-module/drivers/kscan/CMakeLists.txt`（zephyr_library_amend → zephyr_library）
 - 删除 `zephyr/module.yml`（垃圾文件，未跟踪）
 - 记忆文件更新
+
+## Session: 2026-08-08 — P0.13/CE 根因纠正 + 代码回退
+
+### 根因纠正（重要）
+之前结论"板载 3.3V LDO 损坏"**不准确**。万用表实测 LDO 三引脚（ME6211C33M5G-N，用户已更换全新）：
+- IN = 4.86V（正常，接 VDDH/RAW）
+- **CE = 0V（异常，应高电平）**
+- OUT = 0V（因 CE 低被关闭）
+
+LDO 没坏，是 **CE 脚没被拉高**导致 LDO 关闭。CE 由 P0.13 控制（原理图标注 P0.13-POWER-EN，下拉 R2=100K）。开发板手册明确：P0.13 设为低时关闭 3.3V VCC。
+
+### 尝试 EXT_POWER 修复（失败）
+1. `numpad.overlay` 加 `EXT_POWER` 节点（`control-gpios = <&gpio0 13 GPIO_ACTIVE_HIGH>`）
+2. `numpad.conf` 加 `CONFIG_ZMK_EXT_POWER=y`
+3. 发现 P0.13 是 nRF52840 **NFC 引脚**，默认非 GPIO，加 `CONFIG_NFCT_PINS_AS_GPIOS=y`
+4. 驱动 init 里手动 `gpio_pin_set` 拉高 P0.13
+5. 编译通过（FLASH 32.23%），烧录后 CE 仍 0V，触摸无反应
+
+### 失败原因推测
+- P0.13 走线/硬件问题，或 NFCT 释放未真正生效
+- 用户更换全新 LDO 后仍无反应，排除 LDO 本身
+- 代码层无法进一步定位，需硬件排查 P0.13 走线
+
+### 最终决策：代码回退到 HEAD
+- `git restore` 回退 `numpad.conf` + `numpad.overlay`（EXT_POWER/NFCT 改动）
+- 工作区干净，代码状态 = HEAD `3ec4de0`（poll 三键 + 三层 keymap，无 ext-power）
+- 重新编译通过（FLASH 261320B / 32.22%）
+- **供电问题交由用户硬件层处理**（飞线 RAW 或外接 LDO），代码层不再尝试
+
+### 当前可用状态
+- 矩阵 + 编码器 + 三层 keymap 编译通过
+- 飞线 RAW 供电时，AI32C 三键触摸触发音量增加（已验证）
+- 固件 `build/zephyr/zmk.uf2`（522752 字节）
+
+### 待办（硬件层，非代码）
+- [x] ~~排查 P0.13 走线~~ / ~~外接 AMS1117-3.3~~ → **放弃维修（2026-08-29 定案）**：LDO 换新后仍无 3.3V（原因不明），飞线 BAT+/RAW 取电也已不可用，当前板子供电报废
+- [ ] **换新 nice!nano 开发板**（新板到手烧录现有 zmk.uf2 即可，无需改代码）
+- [ ] 电压安全：飞线 RAW 超 3.6V，需 3.3V 稳压（换板后此问题消失，新板走正常 VCC 排针）
+
+## Session: 2026-08-29 — 全项目代码审查修复（9 处）
+
+### 修复清单
+1. **build-local.ps1（关键 bug）**：`-DZMK_EXTRA_MODULES=/workspace` → `/workspace/extra-module`。
+   原路径无 `zephyr/module.yml`，Zephyr 模块扫描返回 None，extra-module 整体不进构建
+   （AI32C 驱动/双 LED 模块/绑定全缺失）
+2. **kscan_gpio_ai32c.c**：首个 poll 延迟 500ms，避开 AI32C 上电 400ms 自校准期
+   （T_init，数据手册）未定义输出，防开机误报 KEY1
+3. **kscan_gpio_ai32c.c**：新增深睡眠触摸唤醒——监听 `zmk_activity_state_changed`，
+   SLEEP 前停轮询、两根 OUT 挂 `GPIO_INT_LEVEL_LOW`（nRF PORT/SENSE 路径在
+   System Off 下有效）。空闲 OUT=11（高），任一触摸拉低即 DETECT 唤醒
+   （唤醒=复位重启，开机后轮询 500ms 读回按住状态）
+4. **kscan_gpio_ai32c.c**：编码表注释修正为 (OUT1,OUT2) 顺序，与代码 o1/o2 对齐
+5. **kscan CMakeLists.txt**：include 路径 `../../` → `../../../`（三级目录少算一层，
+   之前仅靠 Zephyr 头文件巧合未暴露；引入 zmk/activity.h 后暴露）
+6. **ble_led.c**：新增 SLEEP 监听关灯——否则深睡眠时蓝灯 50% 概率停在常亮漏电
+7. **battery_led.c**：三处边界——① SLEEP 前清灯（WS2812 锁存颜色会整晚亮）
+   ② 拔 USB 时若 fn 层正显示电量则改显电量而非清屏 ③ 订阅
+   `zmk_battery_state_changed`，真实电量到达后重渲染充电状态（防开机读到 0 误显示）
+8. **numpad.overlay**：头部过时注释重写（单键→三键、编码器 R4C0→R2C3）；
+   AI32C 节点删除误导性 `GPIO_ACTIVE_LOW|GPIO_PULL_UP` 死配置；编码器三重
+   status 声明清理（overlay disabled + overlay okay + keymap okay → 默认 okay）
+9. **文档一致性**：zmk.yml 去掉 OLED feature/description 改 AI32C+RGB；Kconfig.defconfig
+   删除 SSD1306/I2C 死配置；binding yaml 描述改为三键+push-pull 说明
+
+### Build result
+- FLASH: 261844 B / 792 KB = **32.29%**（+0.07%）
+- RAM: 63100 B / 256 KB = **24.07%**（不变）
+- `zmk.uf2`: 523776 字节
+
+### 遗留（未修，记录原因）
+- 10ms 空闲轮询功耗：保持既有 poll 架构（项目约定），深睡眠已无轮询
+- combo timeout 300ms 误触风险：低风险，保留
+- CONFIG_ZMK_USB_LOGGING：硬件调试期保留，量产前再关
+- "USB 供电=充电"启发式：无充电 IC 状态脚，硬件限制
+
+### 待上机验证（换新开发板后）
+- [ ] 深睡眠触摸唤醒
+- [ ] 开机 500ms 内不误触
+- [ ] 拔 USB 后 fn 层电量显示不再被清屏打断
+- [ ] 深睡眠后电量灯/蓝牙灯确认为熄灭

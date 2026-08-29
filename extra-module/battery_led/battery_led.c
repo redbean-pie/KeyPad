@@ -26,6 +26,10 @@
 #include <zmk/event_manager.h>
 #include <zmk/events/layer_state_changed.h>
 #include <zmk/events/usb_conn_state_changed.h>
+#include <zmk/events/battery_state_changed.h>
+#include <zmk/events/activity_state_changed.h>
+#include <zmk/activity.h>
+#include <zmk/keymap.h>
 #include <zmk/usb.h>
 
 LOG_MODULE_DECLARE(zmk, CONFIG_ZMK_LOG_LEVEL);
@@ -136,7 +140,13 @@ static void charging_clear(void) {
     charging = false;
     k_work_cancel_delayable(&blink_work);
     k_work_cancel_delayable(&hide_work);
-    batt_led_clear();
+
+    /* USB 拔出时若正在 fn 层看电量，改为显示电量而非直接清屏 */
+    if (zmk_keymap_layer_active(BATT_LAYER)) {
+        batt_show();
+    } else {
+        batt_led_clear();
+    }
 }
 
 static int batt_led_listener(const zmk_event_t *eh) {
@@ -185,6 +195,44 @@ static int usb_conn_listener(const zmk_event_t *eh) {
 
 ZMK_LISTENER(batt_usb, usb_conn_listener);
 ZMK_SUBSCRIPTION(batt_usb, zmk_usb_conn_state_changed);
+
+/* 电量就绪/变化时刷新：开机瞬间燃料计可能未就绪（读到 0），
+ * USB 供电下会误显示"充电中"；收到真实电量事件后重渲染充电状态。 */
+static int batt_soc_listener(const zmk_event_t *eh) {
+    const struct zmk_battery_state_changed *ev = as_zmk_battery_state_changed(eh);
+    if (ev == NULL) {
+        return ZMK_EV_EVENT_BUBBLE;
+    }
+
+    if (charging) {
+        charging_show();
+    }
+
+    return ZMK_EV_EVENT_BUBBLE;
+}
+
+ZMK_LISTENER(batt_soc, batt_soc_listener);
+ZMK_SUBSCRIPTION(batt_soc, zmk_battery_state_changed);
+
+/* 深睡眠（sys_poweroff）前必须清灯：WS2812 会锁存最后颜色，
+ * 否则整晚亮着耗电。唤醒=复位重启，开机 init 重新点亮。 */
+static int batt_sleep_listener(const zmk_event_t *eh) {
+    const struct zmk_activity_state_changed *ev = as_zmk_activity_state_changed(eh);
+    if (ev == NULL) {
+        return ZMK_EV_EVENT_BUBBLE;
+    }
+
+    if (ev->state == ZMK_ACTIVITY_SLEEP) {
+        k_work_cancel_delayable(&blink_work);
+        k_work_cancel_delayable(&hide_work);
+        batt_led_clear();
+    }
+
+    return ZMK_EV_EVENT_BUBBLE;
+}
+
+ZMK_LISTENER(batt_sleep, batt_sleep_listener);
+ZMK_SUBSCRIPTION(batt_sleep, zmk_activity_state_changed);
 
 static int batt_led_init(void) {
     strip = DEVICE_DT_GET(BATT_STRIP);

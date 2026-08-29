@@ -1,7 +1,7 @@
 # Copyright (c) 2026
 # SPDX-License-Identifier: MIT
 
-description: AI32C capacitive touch kscan driver (single-key)
+description: AI32C capacitive touch kscan driver (3-key, 2-wire encoded)
 
 compatible: "zmk,kscan-gpio-ai32c"
 
@@ -14,4 +14,6 @@ properties:
     description: |
       Two GPIOs connected to AI32C OUT1 and OUT2.
       OUT1 = index 0, OUT2 = index 1.
-      Must be configured as pull-up inputs (GPIO_ACTIVE_LOW | GPIO_PULL_UP).
+      AI32C OUT is push-pull; the driver forces plain GPIO inputs
+      (dt flags are ignored, no pull-up needed).
+      Encoding (OUT1,OUT2): 11=idle, 00=KEY1, 10=KEY2, 01=KEY3.

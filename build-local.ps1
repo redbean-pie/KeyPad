@@ -21,7 +21,7 @@ if ($LASTEXITCODE -ne 0) {
 
 # 3. 编译
 Write-Host "开始编译..." -ForegroundColor Cyan
-docker exec $CONTAINER bash -lc "west build -s zmk/app -b 'nice_nano//zmk' -d build -- -DSHIELD=numpad -DZMK_CONFIG=config -DZMK_EXTRA_MODULES=/workspace"
+docker exec $CONTAINER bash -lc "west build -s zmk/app -b 'nice_nano//zmk' -d build -- -DSHIELD=numpad -DZMK_CONFIG=config -DZMK_EXTRA_MODULES=/workspace/extra-module"
 if ($LASTEXITCODE -eq 0) {
     Write-Host "完成。固件: build/zephyr/zmk.uf2" -ForegroundColor Green
 }

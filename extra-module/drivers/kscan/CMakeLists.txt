@@ -4,8 +4,8 @@
 zephyr_library()
 
 zephyr_library_include_directories(
-    ${CMAKE_CURRENT_LIST_DIR}/../../zmk/app/include
-    ${CMAKE_CURRENT_LIST_DIR}/../../zmk/app/module/include
+    ${CMAKE_CURRENT_LIST_DIR}/../../../zmk/app/include
+    ${CMAKE_CURRENT_LIST_DIR}/../../../zmk/app/module/include
 )
 
 zephyr_library_sources_ifdef(CONFIG_ZMK_KSCAN_GPIO_AI32C kscan_gpio_ai32c.c)

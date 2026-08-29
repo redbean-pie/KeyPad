@@ -19,6 +19,8 @@
 #include <zmk/ble.h>
 #include <zmk/event_manager.h>
 #include <zmk/events/ble_active_profile_changed.h>
+#include <zmk/events/activity_state_changed.h>
+#include <zmk/activity.h>
 
 LOG_MODULE_DECLARE(zmk, CONFIG_ZMK_LOG_LEVEL);
 
@@ -71,6 +73,25 @@ static int ble_led_listener(const zmk_event_t *eh) {
 
 ZMK_LISTENER(ble_led, ble_led_listener);
 ZMK_SUBSCRIPTION(ble_led, zmk_ble_active_profile_changed);
+
+/* 深睡眠（sys_poweroff）前必须关灯，否则 LED 可能停在常亮态漏电；
+ * 唤醒=复位重启，开机 init 会重新按连接状态点亮。 */
+static int ble_led_activity_listener(const zmk_event_t *eh) {
+    const struct zmk_activity_state_changed *ev = as_zmk_activity_state_changed(eh);
+    if (ev == NULL) {
+        return ZMK_EV_EVENT_BUBBLE;
+    }
+
+    if (ev->state == ZMK_ACTIVITY_SLEEP) {
+        k_work_cancel_delayable(&blink_work);
+        ble_led_set(false);
+    }
+
+    return ZMK_EV_EVENT_BUBBLE;
+}
+
+ZMK_LISTENER(ble_led_sleep, ble_led_activity_listener);
+ZMK_SUBSCRIPTION(ble_led_sleep, zmk_activity_state_changed);
 
 static int ble_led_init(void) {
     if (!gpio_is_ready_dt(&ble_led_gpio)) {

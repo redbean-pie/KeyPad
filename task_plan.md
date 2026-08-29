@@ -4,10 +4,10 @@
 将 AI32C 三通道电容触摸作为 3 个独立触摸键集成到 numpad 固件中，替代已移除的 OLED，实现触摸输入功能。已完成全部固件功能与硬件设计。
 
 ## Next Step
-烧录 zmk.uf2 到 nice!nano v2，杜邦线模拟 AI32C 输出验证解码；PCB 打板后真实触摸测试。
+换新 nice!nano 开发板（板载供电报废：P0.13/CE 拉不高 + LDO 换新仍无 3.3V + 飞线取电失效）。新板到手后：烧录 zmk.uf2 → 直接上机验证 Phase 6 修复项（深睡眠触摸唤醒、开机无误触、深睡眠 LED 熄灭）→ 之后 PCB 打板真实触摸测试。
 
 ## Current Phase
-Phase 5
+Phase 6（代码审查修复完成，待换新开发板后上机验证）
 
 ## Phases
 
@@ -42,9 +42,23 @@ Phase 5
 - [x] 矩阵按键 + 编码器 + Combo 通过
 - [x] AI32C 触摸功能验证（飞线 RAW 供电后，三键触发音量增加）
 - [x] 编译通过三层 keymap（2026-08-06 修复 4 个阻塞后全量编译通过，FLASH 32.22% / RAM 24.07%）
-- [ ] 烧录测试三层切换 + 触摸功能
-- [ ] **电压安全**：飞线 RAW(4.1V/5V) 超 nRF52840 3.6V 上限，需换 3.3V LDO 或修板载 LDO
-- **Status:** in_progress（触摸功能已验证，三层 keymap 编译通过，待烧录实测 + 电压处理）
+- [x] 尝试 EXT_POWER + NFCT_PINS_AS_GPIOS 拉高 P0.13 修复供电（失败，已回退）
+- [x] ~~供电修复（硬件层）~~ → **结论（2026-08-29）：板载供电判定报废**。P0.13 拉不高 CE 无解，LDO 换新后仍无 3.3V 输出（原因不明），且飞线 BAT+ 取电也已不可用。方案：**换新的 nice!nano 开发板**
+- **Status:** closed（硬件层放弃维修，换板解决）
+
+### Phase 6: 全项目代码审查修复（2026-08-29）
+- [x] build-local.ps1：ZMK_EXTRA_MODULES 路径错误（/workspace → /workspace/extra-module，原路径整个模块不进构建）
+- [x] AI32C 驱动：首 poll 延迟 500ms（避开上电 400ms 自校准期，防开机误报 KEY1）
+- [x] AI32C 驱动：深睡眠触摸唤醒（监听 activity_state_changed，SLEEP 前挂 LEVEL_LOW SENSE 中断）
+- [x] AI32C 驱动：编码表注释修正为 (OUT1,OUT2) 顺序
+- [x] kscan CMakeLists：include 相对路径 ../../ → ../../../（三级目录层级错误）
+- [x] ble_led：深睡前关灯（防常亮漏电）
+- [x] battery_led：深睡前清灯 + 拔 USB 保留 fn 层电量显示 + 订阅电量事件防开机误显示
+- [x] overlay/keymap：头部过时注释、AI32C 死配置 GPIO flags、编码器三重 status 清理
+- [x] 文档一致性：zmk.yml（去 OLED）、Kconfig.defconfig（去 SSD1306）、binding yaml（三键说明）
+- [x] 编译通过：FLASH 32.29% / RAM 24.07%，zmk.uf2 523776 字节
+- [ ] 上机验证：深睡眠触摸唤醒、开机无误触、拔 USB 显示、深睡眠 LED 熄灭
+- **Status:** in_progress（代码完成并编译通过，上机验证待硬件供电修复）
 
 ### 额外功能（已全部完成）
 - [x] **WS2812 RGB**：主链 19 颗（D20/SPIM3）+ 电量链 2 颗（D19/SPIM2）
@@ -77,6 +91,9 @@ Phase 5
 | 触摸键切层映射 | 编码器按压负责切层，触摸键在每层做不同功能（媒体/亮度）|
 | **驱动改 poll 三键独立版**（2026-08-06）| GPIOTE 中断不触发（根因是 LDO 损坏没通电，但 poll 更可靠且已验证）|
 | **AI32C 纯输入无 PULL_UP**（2026-08-06）| AI32C OUT 是 push-pull 输出，主动驱动高低，无需 PULL_UP；飞线 5V 时 PULL_UP 会冲突 |
+| **EXT_POWER 修复供电失败，代码回退 HEAD**（2026-08-08）| 根因纠正：LDO 没坏，是 CE=0V（P0.13 未拉高）关闭 LDO。加 EXT_POWER 节点 + CONFIG_NFCT_PINS_AS_GPIOS + 驱动手动拉高 P0.13，烧录后 CE 仍 0V。代码层无法修复，回退到 HEAD 稳定版，供电交硬件层处理 |
+| **深睡眠唤醒改为活动事件 + SENSE 中断**（2026-08-29）| ZMK 深睡眠=sys_poweroff（复位重启式唤醒），PM_DEVICE action 不适合本驱动；监听 zmk_activity_state_changed 在 SLEEP 前挂 LEVEL_LOW 中断最贴合现有 poll 架构 |
+| **有意保留项**（2026-08-29）| 10ms 空闲轮询（poll 架构约定，深睡眠已无轮询）；combo 300ms（低风险）；USB 日志（调试期保留）；USB 供电=充电启发式（无充电 IC 状态脚）|
 
 ## Errors Encountered
 | Error | Attempt | Resolution |
@@ -86,14 +103,18 @@ Phase 5
 | battery_led CMake zephyr_library_amend 失败 | 1 | 改 zephyr_library() 自建库 + 补 include |
 | ble_led GPIO_DT_SPEC_GET 直接传参报错 | 1 | 改 static spec 变量取地址 |
 | 滑条 sensor 方案死机 + 触摸无反应 | 1 | 废弃滑条方案，回退到 kscan 触摸键方案 |
-| 短接 D6/D7 不触发触摸 | 多轮 | 根因：nice!nano 板载 3.3V LDO 损坏（输出 0V），AI32C 从未通电。飞线 RAW 供电后恢复 |
+| 短接 D6/D7 不触发触摸 | 多轮 | 根因：LDO 的 CE=0V（P0.13 未拉高）关闭 LDO，AI32C VDD=0V 从未通电。飞线 RAW 供电后恢复 |
 | pristine build 报 spi1_sleep lacks sensor-binding-cells | 1 | Zephyr 版本与 ZMK sensor binding 兼容性问题（非代码），用增量编译绕过 |
+| EXT_POWER 拉高 P0.13 烧录后 CE 仍 0V | 1 | 加 CONFIG_NFCT_PINS_AS_GPIOS + 驱动手动拉高仍无效，P0.13 走线/硬件问题，代码层放弃，回退 HEAD |
+| kscan 驱动引入 zmk/activity.h 报 No such file | 1 | kscan CMakeLists include 相对路径少算一层（../../ → ../../../），暴露了本就错误的路径 |
 
 ## Notes
 - AI32C: 3通道电容触摸，2.5-5.5V，2线编码输出，内置消抖，7µA 睡眠
 - **AI32C OUT 是 push-pull 输出**（非开漏），空闲 11，无需 PULL_UP
-- 当前 FLASH 32.30% / RAM 24.10%（三层 keymap 待重新编译）
+- 当前 FLASH 32.29% / RAM 24.07%（2026-08-29 Phase 6 修复后，zmk.uf2 523776 字节）
 - 构建：`west build -d build`（增量，不要 pristine）/ `west build -s zmk/app -b nice_nano//zmk -d build -- -DSHIELD=numpad`（全量）
-- **硬件修复**：nice!nano 板载 3.3V LDO 损坏，当前飞线 RAW->AI32C VDD 临时供电，待修 LDO 或加外接 AMS1117-3.3
+- **硬件结论（2026-08-29 定案）**：当前 nice!nano 板载供电报废——P0.13 拉不高 CE 无解，LDO（ME6211C33M5G-N）换新后仍无 3.3V 输出（原因不明），飞线 RAW/BAT+ 取电也已不可用。不维修，换新开发板解决。新板到手直接烧录现有 zmk.uf2 验证，无需改代码
+- **代码状态**：工作区含 2026-08-29 Phase 6 修复（9 项，未提交）——基于 HEAD `3ec4de0`，poll 三键 + 三层 keymap + 深睡眠唤醒/关灯修复，固件 `build/zephyr/zmk.uf2`（523776 字节）已编译生成
+- **上机验证清单**（换新板后）：深睡眠触摸唤醒、开机 500ms 无误触、拔 USB fn 层电量不被清屏、深睡眠后电量灯/蓝牙灯熄灭
 - 所有 GPIO 已分配：左列 D2-D9 + 右列 D10-D18 + D19/D20/D21
 - 历史：滑条 sensor 方案（ai32c_slider.c）于 2026-08-06 废弃，回退到 kscan 触摸键方案（kscan_gpio_ai32c.c）
